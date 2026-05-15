@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KIPI Mundial 2026 Typer</title>
+    <meta
+      name="description"
+      content="Strona wyników Mundialu 2026 z terminarzem, tabelami grup, typowaniem i rankingiem typerów."
+    />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#dashboard" aria-label="KIPI Mundial 2026">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-word">KIPI</span>
+        <span class="brand-line"></span>
+        <span class="brand-event">Mundial 2026</span>
+      </a>
+      <nav class="main-nav" aria-label="Główna nawigacja">
+        <a href="#matches">Terminarz</a>
+        <a href="#groups">Grupy</a>
+        <a href="#predictions">Typowanie</a>
+        <a href="#ranking">Ranking</a>
+        <a href="#data-tools">Dane</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="dashboard" id="dashboard" aria-labelledby="dashboard-title">
+        <div class="dashboard-copy">
+          <p class="section-label">KIPI Typer</p>
+          <h1 id="dashboard-title">Wyniki, typy i ranking Mundialu 2026</h1>
+          <div class="hero-controls" aria-label="Szybkie akcje">
+            <a class="button button-primary" href="#predictions">Dodaj typ</a>
+            <a class="button button-ghost" href="#matches">Aktualizuj wynik</a>
+          </div>
+        </div>
+        <aside class="next-match" aria-live="polite">
+          <span class="eyebrow">Najbliższy mecz</span>
+          <div class="next-match-teams" id="next-match-teams">Ładowanie...</div>
+          <div class="next-match-meta" id="next-match-meta"></div>
+        </aside>
+      </section>
+
+      <section class="metric-grid" aria-label="Podsumowanie turnieju">
+        <article class="metric">
+          <span class="metric-label">Mecze</span>
+          <strong id="metric-matches">0 / 104</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Typerzy</span>
+          <strong id="metric-players">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Lider</span>
+          <strong id="metric-leader">-</strong>
+        </article>
+        <article class="metric metric-accent">
+          <span class="metric-label">Punktacja</span>
+          <strong id="metric-scoring">-</strong>
+        </article>
+      </section>
+
+      <section class="app-section" id="matches" aria-labelledby="matches-title">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Terminarz i wyniki</p>
+            <h2 id="matches-title">Mecze</h2>
+          </div>
+          <div class="toolbar">
+            <input id="match-search" type="search" placeholder="Szukaj drużyny lub miasta" />
+            <select id="stage-filter" aria-label="Filtr fazy"></select>
+            <select id="group-filter" aria-label="Filtr grupy"></select>
+          </div>
+        </div>
+        <div class="match-list" id="match-list"></div>
+      </section>
+
+      <section class="app-section split" id="groups" aria-labelledby="groups-title">
+        <div class="section-head section-head-sticky">
+          <div>
+            <p class="section-label">Tabele</p>
+            <h2 id="groups-title">Grupy A-L</h2>
+          </div>
+        </div>
+        <div class="group-grid" id="group-grid"></div>
+      </section>
+
+      <section class="app-section" id="predictions" aria-labelledby="predictions-title">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Typowanie</p>
+            <h2 id="predictions-title">Karta typera</h2>
+          </div>
+          <div class="player-bar">
+            <select id="active-player" aria-label="Aktywny typer"></select>
+            <input id="new-player" type="text" placeholder="Nowy typer" maxlength="32" />
+            <button class="button button-primary" id="add-player" type="button">Dodaj</button>
+          </div>
+        </div>
+        <div class="prediction-panel">
+          <div class="prediction-summary" id="prediction-summary"></div>
+          <div class="prediction-list" id="prediction-list"></div>
+        </div>
+      </section>
+
+      <section class="app-section" id="ranking" aria-labelledby="ranking-title">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Ranking</p>
+            <h2 id="ranking-title">Tabela typerów</h2>
+          </div>
+        </div>
+        <div class="ranking-wrap">
+          <table class="ranking-table">
+            <thead>
+              <tr>
+                <th>Pozycja</th>
+                <th>Typer</th>
+                <th>Punkty</th>
+                <th>Dokładne</th>
+                <th>Trafione znaki</th>
+                <th>Typy</th>
+              </tr>
+            </thead>
+            <tbody id="ranking-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="app-section data-tools" id="data-tools" aria-labelledby="data-title">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Import / eksport</p>
+            <h2 id="data-title">Dane aplikacji</h2>
+          </div>
+          <div class="toolbar">
+            <button class="button button-ghost" id="export-state" type="button">Eksport JSON</button>
+            <button class="button button-danger" id="reset-state" type="button">Wyczyść lokalnie</button>
+          </div>
+        </div>
+        <textarea id="state-import" spellcheck="false" placeholder="Wklej eksport JSON"></textarea>
+        <div class="import-actions">
+          <button class="button button-primary" id="import-state" type="button">Importuj dane</button>
+          <span id="data-status" role="status"></span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>KIPI Mundial 2026 Typer</span>
+      <span id="generated-from"></span>
+    </footer>
+
+    <script src="assets/app.js" type="module"></script>
+  </body>
+</html>
