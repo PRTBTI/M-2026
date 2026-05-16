@@ -18,16 +18,57 @@
           <span></span>
           <span></span>
         </div>
-        <p class="section-label">Terminal logowania</p>
-        <h1 id="login-title">Gmail Access</h1>
-        <form class="login-form" id="login-form">
-          <label for="login-email">Adres Gmail</label>
+        <p class="section-label">Terminal konta</p>
+        <h1 id="login-title">Typer Access</h1>
+        <div class="auth-tabs" role="tablist" aria-label="Logowanie i rejestracja">
+          <button class="auth-tab is-active" id="show-login" type="button">Logowanie</button>
+          <button class="auth-tab" id="show-register" type="button">Rejestracja</button>
+        </div>
+
+        <form class="auth-form" id="login-form">
+          <label for="login-email">E-mail</label>
           <div class="terminal-input-row">
             <span aria-hidden="true">&gt;</span>
-            <input id="login-email" type="text" inputmode="email" autocomplete="email" placeholder="nazwa@gmail.com" required />
+            <input id="login-email" type="text" inputmode="email" autocomplete="email" placeholder="mail@firma.pl" required />
+          </div>
+          <label for="login-password">Hasło</label>
+          <div class="terminal-input-row">
+            <span aria-hidden="true">&gt;</span>
+            <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••" required />
           </div>
           <button class="button button-primary" type="submit">Zaloguj</button>
           <p class="login-status" id="login-status" role="status"></p>
+        </form>
+
+        <form class="auth-form is-hidden" id="register-form">
+          <div class="form-grid">
+            <label>
+              Imię
+              <input id="register-first-name" type="text" autocomplete="given-name" required />
+            </label>
+            <label>
+              Nazwisko
+              <input id="register-last-name" type="text" autocomplete="family-name" required />
+            </label>
+          </div>
+          <label>
+            E-mail
+            <input id="register-email" type="text" inputmode="email" autocomplete="email" required />
+          </label>
+          <label>
+            Pseudonim opcjonalnie
+            <input id="register-nickname" type="text" maxlength="32" />
+          </label>
+          <label>
+            Hasło
+            <input id="register-password" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <button class="button button-primary" type="submit">Utwórz konto</button>
+          <div class="verification-box is-hidden" id="verification-box">
+            <span>Link potwierdzający</span>
+            <a id="verification-link" href="#">Potwierdź e-mail</a>
+          </div>
+          <p class="login-status" id="register-status" role="status"></p>
         </form>
       </div>
     </section>
@@ -43,6 +84,7 @@
         <nav class="main-nav" aria-label="Główna nawigacja">
           <a href="#matches">Terminarz</a>
           <a href="#groups">Grupy</a>
+          <a href="#account">Panel</a>
           <a href="#predictions">Typowanie</a>
           <a href="#ranking">Ranking</a>
           <a href="#data-tools">Dane</a>
@@ -88,6 +130,55 @@
           <span class="metric-label">Punktacja</span>
           <strong id="metric-scoring">-</strong>
         </article>
+      </section>
+
+      <section class="app-section account-section" id="account" aria-labelledby="account-title">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Konto</p>
+            <h2 id="account-title">Panel indywidualny</h2>
+          </div>
+          <div class="toolbar">
+            <button class="button button-ghost" id="theme-toggle" type="button">Tryb ciemny</button>
+          </div>
+        </div>
+        <div class="account-grid">
+          <article class="account-card">
+            <span>Profil</span>
+            <strong id="account-display-name">-</strong>
+            <p id="account-meta">-</p>
+          </article>
+          <article class="account-card">
+            <span>Moje punkty</span>
+            <strong id="account-score">0</strong>
+            <p id="account-rank">Pozycja w rankingu: -</p>
+          </article>
+          <article class="account-card">
+            <span>Moje typy</span>
+            <strong id="account-typed">0</strong>
+            <p id="account-exact">Dokładne trafienia: 0</p>
+          </article>
+        </div>
+        <form class="settings-form" id="settings-form">
+          <label>
+            Pseudonim
+            <input id="settings-nickname" type="text" maxlength="32" />
+          </label>
+          <label>
+            Ulubiona drużyna
+            <input id="settings-team" type="text" maxlength="48" />
+          </label>
+          <label>
+            Kolor akcentu
+            <input id="settings-accent" type="color" value="#f1861d" />
+          </label>
+          <label class="check-row">
+            <input id="settings-compact" type="checkbox" />
+            Widok kompaktowy
+          </label>
+          <button class="button button-primary" type="submit">Zapisz ustawienia</button>
+          <span id="settings-status" role="status"></span>
+        </form>
       </section>
 
       <section class="app-section" id="matches" aria-labelledby="matches-title">

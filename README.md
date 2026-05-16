@@ -22,6 +22,12 @@ Dane turnieju są w `data/worldcup-2026.json` i pochodzą z pliku `WorldCup_2026
 
 Wyniki, typy i lista typerów zapisują się w `localStorage` przeglądarki. Do przenoszenia danych między osobami służy sekcja `Dane` w aplikacji: eksport JSON i import JSON.
 
+## Konta użytkowników
+
+Aplikacja ma lokalny przepływ konta: rejestracja, hasło, link potwierdzający e-mail, logowanie, panel użytkownika, ustawienia profilu oraz tryb jasny/ciemny. W statycznej wersji GitHub Pages link potwierdzający jest generowany w aplikacji i widoczny po rejestracji.
+
+Produkcyjna wysyłka maili, bezpieczne przechowywanie haseł i realna sesja użytkownika wymagają backendu lub dostawcy auth, np. Supabase Auth, Firebase Auth albo Auth0. Frontend jest przygotowany tak, żeby taki backend podpiąć później bez przebudowy ekranów.
+
 Regeneracja danych z Excela:
 
 ```powershell

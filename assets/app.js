@@ -1,5 +1,6 @@
 const DATA_URL = "data/worldcup-2026.json";
 const STORAGE_KEY = "kipi-m2026-state-v1";
+const ACCOUNT_STORAGE_KEY = "kipi-m2026-accounts-v1";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -29,15 +30,41 @@ const els = {
   dataStatus: $("#data-status"),
   generatedFrom: $("#generated-from"),
   loginForm: $("#login-form"),
+  registerForm: $("#register-form"),
+  showLogin: $("#show-login"),
+  showRegister: $("#show-register"),
   loginEmail: $("#login-email"),
+  loginPassword: $("#login-password"),
   loginStatus: $("#login-status"),
+  registerFirstName: $("#register-first-name"),
+  registerLastName: $("#register-last-name"),
+  registerEmail: $("#register-email"),
+  registerNickname: $("#register-nickname"),
+  registerPassword: $("#register-password"),
+  registerStatus: $("#register-status"),
+  verificationBox: $("#verification-box"),
+  verificationLink: $("#verification-link"),
   userSession: $("#user-session"),
   sessionEmail: $("#session-email"),
   logoutButton: $("#logout-button"),
+  themeToggle: $("#theme-toggle"),
+  settingsForm: $("#settings-form"),
+  settingsNickname: $("#settings-nickname"),
+  settingsTeam: $("#settings-team"),
+  settingsAccent: $("#settings-accent"),
+  settingsCompact: $("#settings-compact"),
+  settingsStatus: $("#settings-status"),
+  accountDisplayName: $("#account-display-name"),
+  accountMeta: $("#account-meta"),
+  accountScore: $("#account-score"),
+  accountRank: $("#account-rank"),
+  accountTyped: $("#account-typed"),
+  accountExact: $("#account-exact"),
 };
 
 let data;
 let state;
+let accounts = [];
 
 function cleanPlayers(players = []) {
   return [...new Set(players.map((name) => String(name || "").trim()).filter(Boolean))]
@@ -82,19 +109,58 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function loadAccounts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAccounts() {
+  localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+}
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function isGmailAddress(email) {
-  return /^[^\s@]+@(gmail\.com|googlemail\.com)$/.test(email);
+function isEmailAddress(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function playerNameFromEmail(email) {
-  const localPart = email.split("@")[0].replace(/\+.*/, "");
-  const words = localPart.split(/[._-]+/).filter(Boolean);
-  const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-  return name || email;
+function randomToken() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256(value) {
+  const encoded = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashPassword(password, salt = randomToken()) {
+  return {
+    salt,
+    hash: await sha256(`${salt}:${password}`),
+  };
+}
+
+function displayNameForAccount(account) {
+  const nickname = String(account.nickname || "").trim();
+  if (nickname) return nickname;
+  return `${account.firstName || ""} ${account.lastName || ""}`.trim() || account.email;
+}
+
+function accountByEmail(email) {
+  return accounts.find((account) => account.email === normalizeEmail(email));
+}
+
+function accountById(id) {
+  return accounts.find((account) => account.id === id);
 }
 
 function ensurePlayer(name) {
@@ -104,25 +170,170 @@ function ensurePlayer(name) {
   state.activePlayer = name;
 }
 
-function loginWithEmail(emailValue) {
-  const email = normalizeEmail(emailValue);
-  if (!isGmailAddress(email)) {
-    els.loginStatus.textContent = "Podaj adres w domenie gmail.com.";
-    return;
+function migratePlayerName(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  const index = state.players.indexOf(oldName);
+  if (index >= 0 && !state.players.includes(newName)) {
+    state.players[index] = newName;
+  } else if (!state.players.includes(newName)) {
+    state.players.push(newName);
   }
-  const player = playerNameFromEmail(email);
+  if (state.predictions[oldName] && !state.predictions[newName]) {
+    state.predictions[newName] = state.predictions[oldName];
+    delete state.predictions[oldName];
+  }
+  if (state.activePlayer === oldName) state.activePlayer = newName;
+}
+
+function activateAccount(account) {
+  const player = displayNameForAccount(account);
   ensurePlayer(player);
   state.user = {
-    email,
+    accountId: account.id,
+    email: account.email,
     player,
-    provider: "gmail",
     loggedInAt: new Date().toISOString(),
   };
   saveState();
-  els.loginEmail.value = "";
+}
+
+function setAuthMode(mode) {
+  const isRegister = mode === "register";
+  els.registerForm.classList.toggle("is-hidden", !isRegister);
+  els.loginForm.classList.toggle("is-hidden", isRegister);
+  els.showRegister.classList.toggle("is-active", isRegister);
+  els.showLogin.classList.toggle("is-active", !isRegister);
+  els.loginStatus.textContent = "";
+  els.registerStatus.textContent = "";
+}
+
+function verificationUrl(token) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("verify", token);
+  url.hash = "";
+  return url.toString();
+}
+
+function showVerificationLink(account) {
+  const url = verificationUrl(account.verificationToken);
+  els.verificationLink.href = url;
+  els.verificationLink.textContent = url;
+  els.verificationBox.classList.remove("is-hidden");
+}
+
+function validateRegistration(form) {
+  if (!form.firstName || !form.lastName) return "Podaj imię i nazwisko.";
+  if (!isEmailAddress(form.email)) return "Podaj poprawny adres e-mail.";
+  if (form.password.length < 8) return "Hasło musi mieć co najmniej 8 znaków.";
+  return "";
+}
+
+async function registerAccount() {
+  const form = {
+    firstName: els.registerFirstName.value.trim(),
+    lastName: els.registerLastName.value.trim(),
+    email: normalizeEmail(els.registerEmail.value),
+    nickname: els.registerNickname.value.trim(),
+    password: els.registerPassword.value,
+  };
+  const error = validateRegistration(form);
+  if (error) {
+    els.registerStatus.textContent = error;
+    return;
+  }
+
+  let account = accountByEmail(form.email);
+  if (account?.verified) {
+    els.registerStatus.textContent = "Konto z tym adresem już istnieje. Zaloguj się.";
+    setAuthMode("login");
+    return;
+  }
+
+  const password = await hashPassword(form.password, account?.passwordSalt);
+  if (!account) {
+    account = {
+      id: randomToken(),
+      email: form.email,
+      createdAt: new Date().toISOString(),
+      preferences: {
+        theme: "light",
+        accent: "#f1861d",
+        compact: false,
+        favoriteTeam: "",
+      },
+    };
+    accounts.push(account);
+  }
+  Object.assign(account, {
+    firstName: form.firstName,
+    lastName: form.lastName,
+    nickname: form.nickname,
+    passwordSalt: password.salt,
+    passwordHash: password.hash,
+    verified: false,
+    verificationToken: randomToken(),
+    pendingSince: new Date().toISOString(),
+  });
+  saveAccounts();
+  showVerificationLink(account);
+  els.registerPassword.value = "";
+  els.registerStatus.textContent =
+    "Wysłano link potwierdzający. W statycznym demo link jest widoczny powyżej; produkcyjnie wyśle go backend.";
+}
+
+async function loginWithCredentials() {
+  const email = normalizeEmail(els.loginEmail.value);
+  const account = accountByEmail(email);
+  if (!account) {
+    els.loginStatus.textContent = "Nie znaleziono konta dla tego adresu.";
+    return;
+  }
+  if (!account.verified) {
+    showVerificationLink(account);
+    setAuthMode("register");
+    els.registerStatus.textContent = "Najpierw potwierdź adres e-mail.";
+    return;
+  }
+  const passwordCheck = await hashPassword(els.loginPassword.value, account.passwordSalt);
+  if (passwordCheck.hash !== account.passwordHash) {
+    els.loginStatus.textContent = "Nieprawidłowy e-mail lub hasło.";
+    return;
+  }
+  activateAccount(account);
+  els.loginPassword.value = "";
   els.loginStatus.textContent = "";
   renderAll();
-  renderAuth();
+}
+
+function verifyAccountFromUrl() {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("verify");
+  if (!token) return false;
+  const account = accounts.find((item) => item.verificationToken === token);
+  if (!account) {
+    els.loginStatus.textContent = "Link potwierdzający jest nieprawidłowy albo wygasł.";
+    url.searchParams.delete("verify");
+    history.replaceState({}, "", url);
+    return false;
+  }
+  account.verified = true;
+  account.verifiedAt = new Date().toISOString();
+  account.verificationToken = "";
+  saveAccounts();
+  activateAccount(account);
+  url.searchParams.delete("verify");
+  history.replaceState({}, "", url);
+  return true;
+}
+
+function applyAccountPreferences() {
+  const account = state.user?.accountId ? accountById(state.user.accountId) : null;
+  const preferences = account?.preferences || {};
+  const theme = preferences.theme === "dark" ? "dark" : "light";
+  document.body.classList.toggle("theme-dark", theme === "dark");
+  document.body.classList.toggle("compact-view", Boolean(preferences.compact));
+  document.documentElement.style.setProperty("--orange", preferences.accent || "#f1861d");
+  if (els.themeToggle) els.themeToggle.textContent = theme === "dark" ? "Tryb jasny" : "Tryb ciemny";
 }
 
 function logout() {
@@ -139,6 +350,7 @@ function renderAuth() {
   if (isLoggedIn) {
     els.sessionEmail.textContent = state.user.email;
   }
+  applyAccountPreferences();
 }
 
 function formatDate(iso) {
@@ -493,6 +705,51 @@ function renderRanking() {
     .join("");
 }
 
+function renderAccountPanel() {
+  const account = state.user?.accountId ? accountById(state.user.accountId) : null;
+  if (!account) return;
+  const rows = ranking();
+  const index = rows.findIndex((row) => row.player === state.activePlayer);
+  const mine = rows[index] || { total: 0, typed: 0, exact: 0 };
+  els.accountDisplayName.textContent = displayNameForAccount(account);
+  els.accountMeta.textContent = `${account.firstName} ${account.lastName} · ${account.email}`;
+  els.accountScore.textContent = mine.total;
+  els.accountRank.textContent = `Pozycja w rankingu: ${index >= 0 ? index + 1 : "-"}`;
+  els.accountTyped.textContent = mine.typed;
+  els.accountExact.textContent = `Dokładne trafienia: ${mine.exact}`;
+  els.settingsNickname.value = account.nickname || "";
+  els.settingsTeam.value = account.preferences?.favoriteTeam || "";
+  els.settingsAccent.value = account.preferences?.accent || "#f1861d";
+  els.settingsCompact.checked = Boolean(account.preferences?.compact);
+}
+
+function saveAccountSettings() {
+  const account = state.user?.accountId ? accountById(state.user.accountId) : null;
+  if (!account) return;
+  const oldPlayer = displayNameForAccount(account);
+  account.nickname = els.settingsNickname.value.trim();
+  account.preferences ||= {};
+  account.preferences.favoriteTeam = els.settingsTeam.value.trim();
+  account.preferences.accent = els.settingsAccent.value || "#f1861d";
+  account.preferences.compact = els.settingsCompact.checked;
+  const newPlayer = displayNameForAccount(account);
+  migratePlayerName(oldPlayer, newPlayer);
+  state.user.player = newPlayer;
+  saveAccounts();
+  saveState();
+  els.settingsStatus.textContent = "Zapisano.";
+  renderAll();
+}
+
+function toggleTheme() {
+  const account = state.user?.accountId ? accountById(state.user.accountId) : null;
+  if (!account) return;
+  account.preferences ||= {};
+  account.preferences.theme = account.preferences.theme === "dark" ? "light" : "dark";
+  saveAccounts();
+  renderAll();
+}
+
 function renderAll() {
   renderDashboard();
   renderFilters();
@@ -501,6 +758,7 @@ function renderAll() {
   renderPlayers();
   renderPredictions();
   renderRanking();
+  renderAccountPanel();
   renderAuth();
 }
 
@@ -561,11 +819,22 @@ function resetState() {
 }
 
 function bindEvents() {
-  els.loginForm.addEventListener("submit", (event) => {
+  els.showLogin.addEventListener("click", () => setAuthMode("login"));
+  els.showRegister.addEventListener("click", () => setAuthMode("register"));
+  els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    loginWithEmail(els.loginEmail.value);
+    await loginWithCredentials();
+  });
+  els.registerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await registerAccount();
   });
   els.logoutButton.addEventListener("click", logout);
+  els.themeToggle.addEventListener("click", toggleTheme);
+  els.settingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveAccountSettings();
+  });
   els.search.addEventListener("input", renderMatches);
   els.stageFilter.addEventListener("change", renderMatches);
   els.groupFilter.addEventListener("change", renderMatches);
@@ -589,7 +858,13 @@ async function init() {
   data = await response.json();
   data.defaultPlayers = cleanPlayers(data.defaultPlayers);
   state = loadState(data);
+  accounts = loadAccounts();
+  if (state.user?.email && !state.user.accountId) {
+    state.user = null;
+    saveState();
+  }
   bindEvents();
+  verifyAccountFromUrl();
   renderAll();
 }
 
