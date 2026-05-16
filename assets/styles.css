@@ -864,6 +864,54 @@ textarea:focus {
   text-align: center;
 }
 
+.phase-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.phase-pill {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  transition: border-color 0.1s, color 0.1s, background 0.1s;
+  white-space: nowrap;
+}
+
+.phase-pill:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.phase-pill.is-active {
+  border-color: var(--orange);
+  background: var(--orange);
+  color: #fff;
+}
+
+body.theme-dark .phase-pill {
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+body.theme-dark .phase-pill:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+body.theme-dark .phase-pill.is-active {
+  color: #fff;
+}
+
 .group-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

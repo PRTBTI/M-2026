@@ -22,7 +22,7 @@ const els = {
   newPlayer: $("#new-player"),
   addPlayer: $("#add-player"),
   search: $("#match-search"),
-  stageFilter: $("#stage-filter"),
+  phaseTabs: $("#phase-tabs"),
   groupFilter: $("#group-filter"),
   exportState: $("#export-state"),
   importState: $("#import-state"),
@@ -80,6 +80,7 @@ const els = {
 let data;
 let state;
 let accounts = [];
+let activeStage = "";
 
 function cleanPlayers(players = []) {
   return [...new Set(players.map((name) => String(name || "").trim()).filter(Boolean))]
@@ -593,13 +594,30 @@ function matchStatus(match) {
   return "Do rozegrania";
 }
 
+function setStageFilter(stage) {
+  activeStage = stage;
+  renderPhaseTabs();
+  const showGroup = !activeStage || activeStage === "Faza grupowa";
+  els.groupFilter.classList.toggle("is-hidden", !showGroup);
+  if (!showGroup) els.groupFilter.value = "";
+  renderMatches();
+}
+
+function renderPhaseTabs() {
+  const pills = els.phaseTabs.querySelectorAll(".phase-pill");
+  pills.forEach((pill) => {
+    const active = pill.dataset.stage === activeStage;
+    pill.classList.toggle("is-active", active);
+    pill.setAttribute("aria-selected", active);
+  });
+}
+
 function filteredMatches() {
   const query = els.search.value.trim().toLowerCase();
-  const stage = els.stageFilter.value;
   const group = els.groupFilter.value;
   return data.matches.filter((match) => {
     const haystack = `${match.homeTeam} ${match.awayTeam} ${match.venue} ${match.stage}`.toLowerCase();
-    return (!query || haystack.includes(query)) && (!stage || match.stage === stage) && (!group || match.group === group);
+    return (!query || haystack.includes(query)) && (!activeStage || match.stage === activeStage) && (!group || match.group === group);
   });
 }
 
@@ -701,11 +719,13 @@ function renderDashboard() {
 
 function renderFilters() {
   const stages = [...new Set(data.matches.map((match) => match.stage))];
-  const currentStage = els.stageFilter.value;
-  els.stageFilter.innerHTML = `<option value="">Wszystkie fazy</option>${stages
-    .map((stage) => `<option value="${stage}">${stage}</option>`)
-    .join("")}`;
-  els.stageFilter.value = stages.includes(currentStage) ? currentStage : "";
+  const pills = [{ stage: "", label: "Wszystkie" }, ...stages.map((s) => ({ stage: s, label: s }))];
+  els.phaseTabs.innerHTML = pills
+    .map(
+      ({ stage, label }) =>
+        `<button class="phase-pill${activeStage === stage ? " is-active" : ""}" data-stage="${stage}" type="button" role="tab" aria-selected="${activeStage === stage}">${label}</button>`,
+    )
+    .join("");
 
   const groups = Object.keys(data.groups);
   const currentGroup = els.groupFilter.value;
@@ -713,6 +733,8 @@ function renderFilters() {
     .map((group) => `<option value="${group}">Grupa ${group}</option>`)
     .join("")}`;
   els.groupFilter.value = groups.includes(currentGroup) ? currentGroup : "";
+  const showGroup = !activeStage || activeStage === "Faza grupowa";
+  els.groupFilter.classList.toggle("is-hidden", !showGroup);
 }
 
 function renderMatches() {
@@ -1132,8 +1154,22 @@ function bindEvents() {
   });
   window.addEventListener("hashchange", () => showView(viewFromHash(), false, true));
   els.search.addEventListener("input", renderMatches);
-  els.stageFilter.addEventListener("change", renderMatches);
   els.groupFilter.addEventListener("change", renderMatches);
+
+  let _phaseHoverTimer = null;
+  els.phaseTabs.addEventListener("mouseover", (e) => {
+    const pill = e.target.closest(".phase-pill");
+    if (!pill || pill.dataset.stage === activeStage) { clearTimeout(_phaseHoverTimer); return; }
+    clearTimeout(_phaseHoverTimer);
+    _phaseHoverTimer = setTimeout(() => setStageFilter(pill.dataset.stage), 150);
+  });
+  els.phaseTabs.addEventListener("mouseleave", () => clearTimeout(_phaseHoverTimer));
+  els.phaseTabs.addEventListener("click", (e) => {
+    const pill = e.target.closest(".phase-pill");
+    if (!pill) return;
+    clearTimeout(_phaseHoverTimer);
+    setStageFilter(pill.dataset.stage);
+  });
   els.activePlayer.addEventListener("change", () => {
     state.activePlayer = els.activePlayer.value;
     saveState();
