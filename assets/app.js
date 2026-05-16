@@ -28,6 +28,12 @@ const els = {
   importBox: $("#state-import"),
   dataStatus: $("#data-status"),
   generatedFrom: $("#generated-from"),
+  loginForm: $("#login-form"),
+  loginEmail: $("#login-email"),
+  loginStatus: $("#login-status"),
+  userSession: $("#user-session"),
+  sessionEmail: $("#session-email"),
+  logoutButton: $("#logout-button"),
 };
 
 let data;
@@ -44,6 +50,7 @@ function createInitialState(source) {
   return {
     players: fallback,
     activePlayer: fallback[0],
+    user: null,
     results: {},
     predictions: {},
     updatedAt: new Date().toISOString(),
@@ -59,6 +66,7 @@ function loadState(source) {
       ...createInitialState(source),
       ...saved,
       players: players.length ? players : cleanPlayers(source.defaultPlayers),
+      user: saved.user && typeof saved.user === "object" ? saved.user : null,
       results: saved.results && typeof saved.results === "object" ? saved.results : {},
       predictions: saved.predictions && typeof saved.predictions === "object" ? saved.predictions : {},
     };
@@ -72,6 +80,65 @@ function loadState(source) {
 function saveState() {
   state.updatedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isGmailAddress(email) {
+  return /^[^\s@]+@(gmail\.com|googlemail\.com)$/.test(email);
+}
+
+function playerNameFromEmail(email) {
+  const localPart = email.split("@")[0].replace(/\+.*/, "");
+  const words = localPart.split(/[._-]+/).filter(Boolean);
+  const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+  return name || email;
+}
+
+function ensurePlayer(name) {
+  if (!state.players.includes(name)) {
+    state.players.push(name);
+  }
+  state.activePlayer = name;
+}
+
+function loginWithEmail(emailValue) {
+  const email = normalizeEmail(emailValue);
+  if (!isGmailAddress(email)) {
+    els.loginStatus.textContent = "Podaj adres w domenie gmail.com.";
+    return;
+  }
+  const player = playerNameFromEmail(email);
+  ensurePlayer(player);
+  state.user = {
+    email,
+    player,
+    provider: "gmail",
+    loggedInAt: new Date().toISOString(),
+  };
+  saveState();
+  els.loginEmail.value = "";
+  els.loginStatus.textContent = "";
+  renderAll();
+  renderAuth();
+}
+
+function logout() {
+  state.user = null;
+  saveState();
+  renderAuth();
+}
+
+function renderAuth() {
+  const isLoggedIn = Boolean(state.user?.email);
+  document.body.classList.toggle("is-authenticated", isLoggedIn);
+  document.body.classList.toggle("login-pending", !isLoggedIn);
+  els.userSession.hidden = !isLoggedIn;
+  if (isLoggedIn) {
+    els.sessionEmail.textContent = state.user.email;
+  }
 }
 
 function formatDate(iso) {
@@ -434,6 +501,7 @@ function renderAll() {
   renderPlayers();
   renderPredictions();
   renderRanking();
+  renderAuth();
 }
 
 function addPlayer() {
@@ -469,6 +537,7 @@ function importState() {
       ...createInitialState(data),
       ...imported,
       players: cleanPlayers(imported.players),
+      user: imported.user || null,
       results: imported.results || {},
       predictions: imported.predictions || {},
     };
@@ -492,6 +561,11 @@ function resetState() {
 }
 
 function bindEvents() {
+  els.loginForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    loginWithEmail(els.loginEmail.value);
+  });
+  els.logoutButton.addEventListener("click", logout);
   els.search.addEventListener("input", renderMatches);
   els.stageFilter.addEventListener("change", renderMatches);
   els.groupFilter.addEventListener("change", renderMatches);
