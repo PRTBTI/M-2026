@@ -364,10 +364,18 @@ body.theme-dark .admin-table {
 }
 
 .main-nav a:hover,
-.main-nav a:focus-visible {
+.main-nav a:focus-visible,
+.main-nav a.is-active {
   background: var(--charcoal);
   color: #fff;
   outline: none;
+}
+
+body.theme-dark .main-nav a:hover,
+body.theme-dark .main-nav a:focus-visible,
+body.theme-dark .main-nav a.is-active {
+  background: var(--orange);
+  color: #fff;
 }
 
 main {
@@ -693,6 +701,19 @@ h3 {
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 12px 32px rgba(34, 33, 30, 0.06);
+}
+
+.view-pane:not(.is-active) {
+  display: none !important;
+}
+
+.dashboard.view-pane.is-active,
+.metric-grid.view-pane.is-active {
+  display: grid;
+}
+
+.app-section.view-pane.is-active {
+  display: block;
 }
 
 .section-head {

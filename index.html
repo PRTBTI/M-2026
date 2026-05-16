@@ -10,7 +10,7 @@
     />
     <link rel="stylesheet" href="assets/styles.css" />
   </head>
-  <body class="login-pending">
+  <body class="login-pending theme-dark">
     <section class="login-terminal" id="login-terminal" aria-labelledby="login-title">
       <div class="terminal-card">
         <div class="terminal-topbar" aria-hidden="true">
@@ -82,6 +82,7 @@
       </a>
       <div class="header-tools">
         <nav class="main-nav" aria-label="Główna nawigacja">
+          <a href="#dashboard">Start</a>
           <a href="#matches">Terminarz</a>
           <a href="#groups">Grupy</a>
           <a href="#account">Panel</a>
@@ -97,7 +98,7 @@
     </header>
 
     <main>
-      <section class="dashboard" id="dashboard" aria-labelledby="dashboard-title">
+      <section class="dashboard view-pane is-active" id="dashboard" data-view="dashboard" aria-labelledby="dashboard-title">
         <div class="dashboard-copy">
           <p class="section-label">KIPI Typer</p>
           <h1 id="dashboard-title">Wyniki, typy i ranking Mundialu 2026</h1>
@@ -113,7 +114,7 @@
         </aside>
       </section>
 
-      <section class="metric-grid" aria-label="Podsumowanie turnieju">
+      <section class="metric-grid view-pane is-active" data-view="dashboard" aria-label="Podsumowanie turnieju">
         <article class="metric">
           <span class="metric-label">Mecze</span>
           <strong id="metric-matches">0 / 104</strong>
@@ -132,7 +133,7 @@
         </article>
       </section>
 
-      <section class="app-section account-section" id="account" aria-labelledby="account-title">
+      <section class="app-section account-section view-pane" id="account" data-view="account" aria-labelledby="account-title">
         <div class="section-head">
           <div>
             <p class="section-label">Konto</p>
@@ -238,7 +239,7 @@
         </section>
       </section>
 
-      <section class="app-section" id="matches" aria-labelledby="matches-title">
+      <section class="app-section view-pane" id="matches" data-view="matches" aria-labelledby="matches-title">
         <div class="section-head">
           <div>
             <p class="section-label">Terminarz i wyniki</p>
@@ -253,7 +254,7 @@
         <div class="match-list" id="match-list"></div>
       </section>
 
-      <section class="app-section split" id="groups" aria-labelledby="groups-title">
+      <section class="app-section split view-pane" id="groups" data-view="groups" aria-labelledby="groups-title">
         <div class="section-head section-head-sticky">
           <div>
             <p class="section-label">Tabele</p>
@@ -263,7 +264,7 @@
         <div class="group-grid" id="group-grid"></div>
       </section>
 
-      <section class="app-section" id="predictions" aria-labelledby="predictions-title">
+      <section class="app-section view-pane" id="predictions" data-view="predictions" aria-labelledby="predictions-title">
         <div class="section-head">
           <div>
             <p class="section-label">Typowanie</p>
@@ -281,7 +282,7 @@
         </div>
       </section>
 
-      <section class="app-section" id="ranking" aria-labelledby="ranking-title">
+      <section class="app-section view-pane" id="ranking" data-view="ranking" aria-labelledby="ranking-title">
         <div class="section-head">
           <div>
             <p class="section-label">Ranking</p>
@@ -305,7 +306,7 @@
         </div>
       </section>
 
-      <section class="app-section data-tools" id="data-tools" aria-labelledby="data-title">
+      <section class="app-section data-tools view-pane" id="data-tools" data-view="data-tools" aria-labelledby="data-title">
         <div class="section-head">
           <div>
             <p class="section-label">Import / eksport</p>

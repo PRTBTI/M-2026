@@ -1,6 +1,7 @@
 const DATA_URL = "data/worldcup-2026.json";
 const STORAGE_KEY = "kipi-m2026-state-v1";
 const ACCOUNT_STORAGE_KEY = "kipi-m2026-accounts-v1";
+const APP_VIEWS = new Set(["dashboard", "matches", "groups", "account", "predictions", "ranking", "data-tools"]);
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -71,6 +72,8 @@ const els = {
   adminVerified: $("#admin-verified"),
   adminStatus: $("#admin-status"),
   adminUsersBody: $("#admin-users-body"),
+  viewPanes: $$(".view-pane"),
+  viewLinks: $$(".brand, .main-nav a, .hero-controls a"),
 };
 
 let data;
@@ -131,6 +134,26 @@ function loadAccounts() {
 
 function saveAccounts() {
   localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+}
+
+function viewFromHash() {
+  const hash = window.location.hash.replace("#", "");
+  return APP_VIEWS.has(hash) ? hash : "dashboard";
+}
+
+function showView(view = viewFromHash(), updateUrl = false, shouldScroll = true) {
+  const nextView = APP_VIEWS.has(view) ? view : "dashboard";
+  els.viewPanes.forEach((pane) => {
+    pane.classList.toggle("is-active", pane.dataset.view === nextView);
+  });
+  els.viewLinks.forEach((link) => {
+    const linkView = (link.getAttribute("href") || "").replace("#", "");
+    link.classList.toggle("is-active", linkView === nextView);
+  });
+  if (updateUrl && window.location.hash !== `#${nextView}`) {
+    history.pushState(null, "", `#${nextView}`);
+  }
+  if (shouldScroll) window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function normalizeEmail(value) {
@@ -195,11 +218,14 @@ function ensureAdminBootstrap() {
     }
     if (!account.preferences) {
       account.preferences = {
-        theme: "light",
+        theme: "dark",
         accent: "#f1861d",
         compact: false,
         favoriteTeam: "",
       };
+      changed = true;
+    } else if (!account.preferences.theme) {
+      account.preferences.theme = "dark";
       changed = true;
     }
   });
@@ -310,7 +336,7 @@ async function registerAccount() {
       email: form.email,
       createdAt: new Date().toISOString(),
       preferences: {
-        theme: "light",
+        theme: "dark",
         accent: "#f1861d",
         compact: false,
         favoriteTeam: "",
@@ -384,7 +410,7 @@ function verifyAccountFromUrl() {
 function applyAccountPreferences() {
   const account = state.user?.accountId ? accountById(state.user.accountId) : null;
   const preferences = account?.preferences || {};
-  const theme = preferences.theme === "dark" ? "dark" : "light";
+  const theme = preferences.theme === "light" ? "light" : "dark";
   document.body.classList.toggle("theme-dark", theme === "dark");
   document.body.classList.toggle("compact-view", Boolean(preferences.compact));
   document.documentElement.style.setProperty("--orange", preferences.accent || "#f1861d");
@@ -919,7 +945,7 @@ async function addAccountFromAdmin() {
     role: form.role,
     createdAt: new Date().toISOString(),
     preferences: {
-      theme: "light",
+      theme: "dark",
       accent: "#f1861d",
       compact: false,
       favoriteTeam: "",
@@ -974,6 +1000,7 @@ function renderAll() {
   renderAccountPanel();
   renderAdminPanel();
   renderAuth();
+  showView(viewFromHash(), false, false);
 }
 
 function addPlayer() {
@@ -1064,6 +1091,15 @@ function bindEvents() {
     if (target.dataset.action !== "delete") return;
     deleteAccount(accountById(target.dataset.accountId));
   });
+  els.viewLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const view = (link.getAttribute("href") || "").replace("#", "");
+      if (!APP_VIEWS.has(view)) return;
+      event.preventDefault();
+      showView(view, true, true);
+    });
+  });
+  window.addEventListener("hashchange", () => showView(viewFromHash(), false, true));
   els.search.addEventListener("input", renderMatches);
   els.stageFilter.addEventListener("change", renderMatches);
   els.groupFilter.addEventListener("change", renderMatches);
