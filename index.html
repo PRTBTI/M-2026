@@ -88,7 +88,7 @@
           <a href="#account">Panel</a>
           <a href="#predictions">Typowanie</a>
           <a href="#ranking">Ranking</a>
-          <a href="#data-tools">Dane</a>
+          <a class="admin-only" href="#data-tools">Dane</a>
         </nav>
         <div class="user-session" id="user-session" hidden>
           <span id="session-email"></span>
@@ -105,7 +105,7 @@
           <h1 id="dashboard-title">Wyniki, typy i ranking Mundialu 2026</h1>
           <div class="hero-controls" aria-label="Szybkie akcje">
             <a class="button button-primary" href="#predictions">Dodaj typ</a>
-            <a class="button button-ghost" href="#matches">Aktualizuj wynik</a>
+            <a class="button button-ghost admin-only" href="#matches">Aktualizuj wynik</a>
           </div>
         </div>
         <aside class="next-match" aria-live="polite">
@@ -252,6 +252,7 @@
           </div>
         </div>
         <div class="phase-tabs" id="phase-tabs" role="tablist" aria-label="Fazy turnieju"></div>
+        <p class="permission-note client-only">Wyniki może aktualizować tylko administrator. Jako klient możesz przeglądać terminarz i zapisywać swoje typy.</p>
         <div class="match-list" id="match-list"></div>
       </section>
 
@@ -273,8 +274,8 @@
           </div>
           <div class="player-bar">
             <select id="active-player" aria-label="Aktywny typer"></select>
-            <input id="new-player" type="text" placeholder="Nowy typer" maxlength="32" />
-            <button class="button button-primary" id="add-player" type="button">Dodaj</button>
+            <input class="admin-player-control" id="new-player" type="text" placeholder="Nowy typer" maxlength="32" />
+            <button class="button button-primary admin-player-control" id="add-player" type="button">Dodaj</button>
           </div>
         </div>
         <div class="prediction-panel">
@@ -307,7 +308,7 @@
         </div>
       </section>
 
-      <section class="app-section data-tools view-pane" id="data-tools" data-view="data-tools" aria-labelledby="data-title">
+      <section class="app-section data-tools view-pane admin-only" id="data-tools" data-view="data-tools" aria-labelledby="data-title">
         <div class="section-head">
           <div>
             <p class="section-label">Import / eksport</p>

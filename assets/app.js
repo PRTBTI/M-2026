@@ -2,6 +2,7 @@ const DATA_URL = "data/worldcup-2026.json";
 const STORAGE_KEY = "kipi-m2026-state-v1";
 const ACCOUNT_STORAGE_KEY = "kipi-m2026-accounts-v1";
 const APP_VIEWS = new Set(["dashboard", "matches", "groups", "account", "predictions", "ranking", "data-tools"]);
+const ADMIN_ONLY_VIEWS = new Set(["data-tools"]);
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -138,13 +139,19 @@ function saveAccounts() {
   localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
 }
 
+function canUseView(view) {
+  return !ADMIN_ONLY_VIEWS.has(view) || isAdmin();
+}
+
 function viewFromHash() {
   const hash = window.location.hash.replace("#", "");
-  return APP_VIEWS.has(hash) ? hash : "dashboard";
+  if (!APP_VIEWS.has(hash)) return "dashboard";
+  return canUseView(hash) ? hash : "account";
 }
 
 function showView(view = viewFromHash(), updateUrl = false, shouldScroll = true) {
-  const nextView = APP_VIEWS.has(view) ? view : "dashboard";
+  const requestedView = APP_VIEWS.has(view) ? view : "dashboard";
+  const nextView = canUseView(requestedView) ? requestedView : "account";
   els.viewPanes.forEach((pane) => {
     pane.classList.toggle("is-active", pane.dataset.view === nextView);
   });
@@ -152,14 +159,25 @@ function showView(view = viewFromHash(), updateUrl = false, shouldScroll = true)
     const linkView = (link.getAttribute("href") || "").replace("#", "");
     link.classList.toggle("is-active", linkView === nextView);
   });
-  if (updateUrl && window.location.hash !== `#${nextView}`) {
-    history.pushState(null, "", `#${nextView}`);
+  if (window.location.hash !== `#${nextView}`) {
+    const method = updateUrl ? "pushState" : "replaceState";
+    history[method](null, "", `#${nextView}`);
   }
   if (shouldScroll) window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char]);
 }
 
 function isEmailAddress(email) {
@@ -197,6 +215,10 @@ function accountByEmail(email) {
 
 function accountById(id) {
   return accounts.find((account) => account.id === id);
+}
+
+function currentAccount() {
+  return state?.user?.accountId ? accountById(state.user.accountId) : null;
 }
 
 function accountRole(account) {
@@ -244,11 +266,32 @@ function ensureAdminBootstrap() {
   if (changed) saveAccounts();
 }
 
-function ensurePlayer(name) {
+function ensurePlayerExists(name) {
   if (!state.players.includes(name)) {
     state.players.push(name);
   }
+}
+
+function ensurePlayer(name) {
+  ensurePlayerExists(name);
   state.activePlayer = name;
+}
+
+function enforceAccountAccess() {
+  const account = currentAccount();
+  if (!account) return;
+  const player = displayNameForAccount(account);
+  let changed = false;
+  if (!state.players.includes(player)) {
+    state.players.push(player);
+    changed = true;
+  }
+  if (!isAdmin(account) && state.activePlayer !== player) {
+    state.activePlayer = player;
+    state.user.player = player;
+    changed = true;
+  }
+  if (changed) saveState();
 }
 
 function migratePlayerName(oldName, newName) {
@@ -429,13 +472,16 @@ function logout() {
 
 function renderAuth() {
   const isLoggedIn = Boolean(state.user?.email);
+  const account = isLoggedIn ? currentAccount() : null;
+  const canAdmin = isAdmin(account);
   document.body.classList.toggle("is-authenticated", isLoggedIn);
   document.body.classList.toggle("login-pending", !isLoggedIn);
+  document.body.classList.toggle("is-admin-user", isLoggedIn && canAdmin);
+  document.body.classList.toggle("is-client-user", isLoggedIn && !canAdmin);
   els.userSession.hidden = !isLoggedIn;
   if (isLoggedIn) {
-    const account = accountById(state.user.accountId);
     const label = account ? displayNameForAccount(account) : state.user.player;
-    els.sessionEmail.textContent = `${label} · ${isAdmin(account) ? "administrator" : "klient"}`;
+    els.sessionEmail.textContent = `${label} · ${canAdmin ? "administrator" : "klient"}`;
   }
   applyAccountPreferences();
 }
@@ -486,7 +532,18 @@ function getPrediction(player, matchId) {
   return isComplete(prediction) ? prediction : null;
 }
 
+function canEditResults() {
+  return isAdmin();
+}
+
+function canEditPrediction(player) {
+  const account = currentAccount();
+  if (!account) return false;
+  return isAdmin(account) || player === displayNameForAccount(account);
+}
+
 function setResult(matchId, pair) {
+  if (!canEditResults()) return;
   if (!pair) delete state.results[String(matchId)];
   else state.results[String(matchId)] = pair;
   saveState();
@@ -494,6 +551,7 @@ function setResult(matchId, pair) {
 }
 
 function setPrediction(player, matchId, pair) {
+  if (!canEditPrediction(player)) return;
   state.predictions[player] ||= {};
   if (!pair) delete state.predictions[player][String(matchId)];
   else state.predictions[player][String(matchId)] = pair;
@@ -624,6 +682,7 @@ function filteredMatches() {
 function createScoreInputs(kind, match, pair, player = "") {
   const wrap = document.createElement("div");
   wrap.className = "score-inputs";
+  const editable = kind === "result" ? canEditResults() : canEditPrediction(player);
   const home = document.createElement("input");
   const away = document.createElement("input");
   const sep = document.createElement("span");
@@ -637,8 +696,16 @@ function createScoreInputs(kind, match, pair, player = "") {
   away.value = pair?.away ?? "";
   home.ariaLabel = `${match.homeTeam} gole`;
   away.ariaLabel = `${match.awayTeam} gole`;
+  home.disabled = !editable;
+  away.disabled = !editable;
+  if (!editable) {
+    const message = kind === "result" ? "Wynik może wpisać administrator." : "Możesz edytować tylko własne typy.";
+    home.title = message;
+    away.title = message;
+  }
   sep.textContent = ":";
   const onChange = () => {
+    if (!editable) return;
     const homeRaw = home.value.trim();
     const awayRaw = away.value.trim();
     if (!homeRaw && !awayRaw) {
@@ -782,35 +849,37 @@ function renderGroups() {
 }
 
 function renderPlayers() {
-  const admin = isAdmin();
-  const myPlayer = state.user?.player;
-  const players = admin
-    ? state.players
-    : myPlayer && state.players.includes(myPlayer)
-      ? [myPlayer]
-      : state.players;
+  const account = currentAccount();
+  const canAdmin = isAdmin(account);
   const active = state.activePlayer;
-
-  els.activePlayer.innerHTML = players.map((p) => `<option value="${p}">${p}</option>`).join("");
+  const players = account && !canAdmin ? [displayNameForAccount(account)] : state.players;
+  const options = players.map((player) => {
+    const option = document.createElement("option");
+    option.value = player;
+    option.textContent = player;
+    return option;
+  });
+  els.activePlayer.replaceChildren(...options);
   els.activePlayer.value = players.includes(active) ? active : players[0];
-
-  if (!admin && myPlayer && state.activePlayer !== myPlayer && state.players.includes(myPlayer)) {
-    state.activePlayer = myPlayer;
-    saveState();
-  }
-
-  els.newPlayer.classList.toggle("is-hidden", !admin);
-  els.addPlayer.classList.toggle("is-hidden", !admin);
+  els.activePlayer.disabled = !canAdmin;
+  els.newPlayer.disabled = !canAdmin;
+  els.addPlayer.disabled = !canAdmin;
+  els.newPlayer.classList.toggle("is-hidden", !canAdmin);
+  els.addPlayer.classList.toggle("is-hidden", !canAdmin);
 }
 
 function renderPredictions() {
+  enforceAccountAccess();
   const player = state.activePlayer;
+  const account = currentAccount();
+  const canAdmin = isAdmin(account);
   const typed = Object.keys(state.predictions[player] || {}).length;
   const ranked = ranking().find((row) => row.player === player);
   els.predictionSummary.innerHTML = `
     <span>Aktywny typer</span>
-    <strong>${player}</strong>
+    <strong>${escapeHtml(player)}</strong>
     <div>${ranked?.total ?? 0} pkt · ${typed} typów · ${ranked?.exact ?? 0} dokładnych</div>
+    <small>${canAdmin ? "Tryb administratora: możesz przełączać typerów." : "Tryb klienta: zapisujesz typy tylko na swoim koncie."}</small>
   `;
   els.predictionList.replaceChildren(...data.matches.map(predictionCard));
 }
@@ -821,7 +890,7 @@ function renderRanking() {
       (row, index) => `
         <tr>
           <td>${index + 1}</td>
-          <td>${row.player}</td>
+          <td>${escapeHtml(row.player)}</td>
           <td>${row.total}</td>
           <td>${row.exact}</td>
           <td>${row.signs}</td>
@@ -1042,6 +1111,7 @@ function toggleTheme() {
 }
 
 function renderAll() {
+  enforceAccountAccess();
   renderDashboard();
   renderFilters();
   renderMatches();
@@ -1056,6 +1126,7 @@ function renderAll() {
 }
 
 function addPlayer() {
+  if (!isAdmin()) return;
   const name = els.newPlayer.value.trim();
   if (!name || state.players.includes(name)) return;
   state.players.push(name);
@@ -1066,6 +1137,10 @@ function addPlayer() {
 }
 
 function exportState() {
+  if (!isAdmin()) {
+    els.dataStatus.textContent = "Eksport danych jest dostępny tylko dla administratora.";
+    return;
+  }
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -1080,6 +1155,10 @@ function exportState() {
 }
 
 function importState() {
+  if (!isAdmin()) {
+    els.dataStatus.textContent = "Import danych jest dostępny tylko dla administratora.";
+    return;
+  }
   try {
     const payload = JSON.parse(els.importBox.value);
     const imported = payload.state || payload;
@@ -1103,6 +1182,10 @@ function importState() {
 }
 
 function resetState() {
+  if (!isAdmin()) {
+    els.dataStatus.textContent = "Czyszczenie danych jest dostępne tylko dla administratora.";
+    return;
+  }
   const ok = window.confirm("Wyczyścić lokalne wyniki, typy i typerów?");
   if (!ok) return;
   localStorage.removeItem(STORAGE_KEY);
@@ -1171,6 +1254,11 @@ function bindEvents() {
     setStageFilter(pill.dataset.stage);
   });
   els.activePlayer.addEventListener("change", () => {
+    if (!isAdmin()) {
+      enforceAccountAccess();
+      renderAll();
+      return;
+    }
     state.activePlayer = els.activePlayer.value;
     saveState();
     renderAll();

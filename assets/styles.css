@@ -447,6 +447,13 @@ h3 {
   margin-top: 32px;
 }
 
+body:not(.is-admin-user) .admin-only,
+body:not(.is-admin-user) .admin-player-control,
+body.is-admin-user .client-only,
+body:not(.is-authenticated) .client-only {
+  display: none !important;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -502,6 +509,13 @@ h3 {
 .button-danger {
   border-color: rgba(189, 45, 31, 0.25);
   color: var(--danger);
+}
+
+.button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .next-match {
@@ -617,6 +631,17 @@ h3 {
 
 #settings-status {
   color: var(--green);
+  font-weight: 800;
+}
+
+.permission-note {
+  margin: -4px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--orange);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
   font-weight: 800;
 }
 
@@ -983,6 +1008,13 @@ tr:last-child td {
   margin-bottom: 12px;
   font-size: 2.6rem;
   line-height: 1;
+}
+
+.prediction-summary small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 800;
 }
 
 .prediction-summary span {
