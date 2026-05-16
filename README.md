@@ -26,6 +26,10 @@ Wyniki, typy i lista typerów zapisują się w `localStorage` przeglądarki. Do 
 
 Aplikacja ma lokalny przepływ konta: rejestracja, hasło, link potwierdzający e-mail, logowanie, panel użytkownika, ustawienia profilu oraz tryb jasny/ciemny. W statycznej wersji GitHub Pages link potwierdzający jest generowany w aplikacji i widoczny po rejestracji.
 
+Konta mają role `klient` i `administrator`. Administrator widzi panel zarządzania użytkownikami, może dodawać konta, usuwać użytkowników, zmieniać role oraz status potwierdzenia e-mail. Jeśli w lokalnych danych nie ma administratora, aplikacja promuje bieżące lub pierwsze istniejące konto do roli administratora, aby nie zablokować panelu.
+
+Nazwa użytkownika jest tworzona z pseudonimu, jeśli został podany. Jeśli pseudonimu nie ma, aplikacja używa imienia i nazwiska. E-mail nie jest używany jako publiczna nazwa użytkownika.
+
 Produkcyjna wysyłka maili, bezpieczne przechowywanie haseł i realna sesja użytkownika wymagają backendu lub dostawcy auth, np. Supabase Auth, Firebase Auth albo Auth0. Frontend jest przygotowany tak, żeby taki backend podpiąć później bez przebudowy ekranów.
 
 Regeneracja danych z Excela:

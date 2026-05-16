@@ -107,7 +107,8 @@ body.theme-dark .metric,
 body.theme-dark .match-card,
 body.theme-dark .prediction-card,
 body.theme-dark .group-card,
-body.theme-dark .ranking-table {
+body.theme-dark .ranking-table,
+body.theme-dark .admin-table {
   background: var(--surface);
 }
 
@@ -578,9 +579,11 @@ h3 {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
+  margin-bottom: 24px;
 }
 
-.settings-form label {
+.settings-form label,
+.admin-add-form label {
   display: grid;
   gap: 7px;
   color: var(--muted);
@@ -605,6 +608,49 @@ h3 {
 }
 
 #settings-status {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.admin-panel {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.admin-add-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.admin-table select {
+  width: 100%;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#admin-status {
   color: var(--green);
   font-weight: 800;
 }
@@ -957,7 +1003,8 @@ tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .settings-form {
+  .settings-form,
+  .admin-add-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1005,7 +1052,8 @@ tr:last-child td {
   .group-grid,
   .account-grid,
   .form-grid,
-  .settings-form {
+  .settings-form,
+  .admin-add-form {
     grid-template-columns: 1fr;
   }
 

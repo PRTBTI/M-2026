@@ -60,6 +60,17 @@ const els = {
   accountRank: $("#account-rank"),
   accountTyped: $("#account-typed"),
   accountExact: $("#account-exact"),
+  adminPanel: $("#admin-panel"),
+  adminAddForm: $("#admin-add-form"),
+  adminFirstName: $("#admin-first-name"),
+  adminLastName: $("#admin-last-name"),
+  adminEmail: $("#admin-email"),
+  adminNickname: $("#admin-nickname"),
+  adminPassword: $("#admin-password"),
+  adminRole: $("#admin-role"),
+  adminVerified: $("#admin-verified"),
+  adminStatus: $("#admin-status"),
+  adminUsersBody: $("#admin-users-body"),
 };
 
 let data;
@@ -152,7 +163,7 @@ async function hashPassword(password, salt = randomToken()) {
 function displayNameForAccount(account) {
   const nickname = String(account.nickname || "").trim();
   if (nickname) return nickname;
-  return `${account.firstName || ""} ${account.lastName || ""}`.trim() || account.email;
+  return `${account.firstName || ""} ${account.lastName || ""}`.trim() || "Użytkownik";
 }
 
 function accountByEmail(email) {
@@ -161,6 +172,48 @@ function accountByEmail(email) {
 
 function accountById(id) {
   return accounts.find((account) => account.id === id);
+}
+
+function accountRole(account) {
+  return account?.role === "admin" ? "admin" : "client";
+}
+
+function isAdmin(account = accountById(state.user?.accountId)) {
+  return accountRole(account) === "admin";
+}
+
+function adminAccounts() {
+  return accounts.filter((account) => accountRole(account) === "admin");
+}
+
+function ensureAdminBootstrap() {
+  let changed = false;
+  accounts.forEach((account) => {
+    if (!account.role) {
+      account.role = "client";
+      changed = true;
+    }
+    if (!account.preferences) {
+      account.preferences = {
+        theme: "light",
+        accent: "#f1861d",
+        compact: false,
+        favoriteTeam: "",
+      };
+      changed = true;
+    }
+  });
+  if (adminAccounts().length) {
+    if (changed) saveAccounts();
+    return;
+  }
+  const current = state.user?.accountId ? accountById(state.user.accountId) : null;
+  const candidate = current || accounts.find((account) => account.verified) || accounts[0];
+  if (candidate) {
+    candidate.role = "admin";
+    changed = true;
+  }
+  if (changed) saveAccounts();
 }
 
 function ensurePlayer(name) {
@@ -205,6 +258,7 @@ function setAuthMode(mode) {
   els.showLogin.classList.toggle("is-active", !isRegister);
   els.loginStatus.textContent = "";
   els.registerStatus.textContent = "";
+  els.verificationBox.classList.add("is-hidden");
 }
 
 function verificationUrl(token) {
@@ -261,6 +315,7 @@ async function registerAccount() {
         compact: false,
         favoriteTeam: "",
       },
+      role: accounts.some((item) => accountRole(item) === "admin") ? "client" : "admin",
     };
     accounts.push(account);
   }
@@ -289,8 +344,8 @@ async function loginWithCredentials() {
     return;
   }
   if (!account.verified) {
-    showVerificationLink(account);
     setAuthMode("register");
+    showVerificationLink(account);
     els.registerStatus.textContent = "Najpierw potwierdź adres e-mail.";
     return;
   }
@@ -348,7 +403,9 @@ function renderAuth() {
   document.body.classList.toggle("login-pending", !isLoggedIn);
   els.userSession.hidden = !isLoggedIn;
   if (isLoggedIn) {
-    els.sessionEmail.textContent = state.user.email;
+    const account = accountById(state.user.accountId);
+    const label = account ? displayNameForAccount(account) : state.user.player;
+    els.sessionEmail.textContent = `${label} · ${isAdmin(account) ? "administrator" : "klient"}`;
   }
   applyAccountPreferences();
 }
@@ -712,7 +769,7 @@ function renderAccountPanel() {
   const index = rows.findIndex((row) => row.player === state.activePlayer);
   const mine = rows[index] || { total: 0, typed: 0, exact: 0 };
   els.accountDisplayName.textContent = displayNameForAccount(account);
-  els.accountMeta.textContent = `${account.firstName} ${account.lastName} · ${account.email}`;
+  els.accountMeta.textContent = `${account.firstName} ${account.lastName} · ${account.email} · ${isAdmin(account) ? "administrator" : "klient"}`;
   els.accountScore.textContent = mine.total;
   els.accountRank.textContent = `Pozycja w rankingu: ${index >= 0 ? index + 1 : "-"}`;
   els.accountTyped.textContent = mine.typed;
@@ -721,6 +778,162 @@ function renderAccountPanel() {
   els.settingsTeam.value = account.preferences?.favoriteTeam || "";
   els.settingsAccent.value = account.preferences?.accent || "#f1861d";
   els.settingsCompact.checked = Boolean(account.preferences?.compact);
+}
+
+function renderAdminPanel() {
+  const current = state.user?.accountId ? accountById(state.user.accountId) : null;
+  const canAdmin = isAdmin(current);
+  els.adminPanel.classList.toggle("is-hidden", !canAdmin);
+  if (!canAdmin) {
+    els.adminUsersBody.replaceChildren();
+    return;
+  }
+
+  const rows = accounts
+    .slice()
+    .sort((a, b) => displayNameForAccount(a).localeCompare(displayNameForAccount(b), "pl"))
+    .map((account) => {
+      const row = document.createElement("tr");
+      const nameCell = document.createElement("td");
+      const emailCell = document.createElement("td");
+      const roleCell = document.createElement("td");
+      const statusCell = document.createElement("td");
+      const actionsCell = document.createElement("td");
+      const roleSelect = document.createElement("select");
+      const statusSelect = document.createElement("select");
+      const deleteButton = document.createElement("button");
+
+      nameCell.textContent = displayNameForAccount(account);
+      emailCell.textContent = account.email;
+      roleSelect.dataset.accountId = account.id;
+      roleSelect.dataset.action = "role";
+      roleSelect.innerHTML = '<option value="client">Klient</option><option value="admin">Administrator</option>';
+      roleSelect.value = accountRole(account);
+      statusSelect.dataset.accountId = account.id;
+      statusSelect.dataset.action = "status";
+      statusSelect.innerHTML = '<option value="verified">Potwierdzone</option><option value="pending">Oczekuje</option>';
+      statusSelect.value = account.verified ? "verified" : "pending";
+      deleteButton.className = "button button-danger button-small";
+      deleteButton.type = "button";
+      deleteButton.dataset.accountId = account.id;
+      deleteButton.dataset.action = "delete";
+      deleteButton.textContent = "Usuń";
+      if (account.id === current.id) deleteButton.disabled = true;
+
+      roleCell.append(roleSelect);
+      statusCell.append(statusSelect);
+      actionsCell.className = "admin-actions";
+      actionsCell.append(deleteButton);
+      row.append(nameCell, emailCell, roleCell, statusCell, actionsCell);
+      return row;
+    });
+
+  els.adminUsersBody.replaceChildren(...rows);
+}
+
+function removePlayerForAccount(account) {
+  const player = displayNameForAccount(account);
+  state.players = state.players.filter((name) => name !== player);
+  if (state.predictions[player]) delete state.predictions[player];
+  if (state.activePlayer === player) {
+    state.activePlayer = state.players[0] || "";
+  }
+}
+
+function updateAccountRole(account, role) {
+  if (!account) return;
+  if (accountRole(account) === "admin" && role !== "admin" && adminAccounts().length <= 1) {
+    els.adminStatus.textContent = "Nie można odebrać roli ostatniemu administratorowi.";
+    renderAdminPanel();
+    return;
+  }
+  account.role = role === "admin" ? "admin" : "client";
+  saveAccounts();
+  els.adminStatus.textContent = "Zmieniono rolę użytkownika.";
+  renderAll();
+}
+
+function updateAccountStatus(account, status) {
+  if (!account) return;
+  account.verified = status === "verified";
+  if (account.verified) {
+    account.verifiedAt ||= new Date().toISOString();
+    account.verificationToken = "";
+  } else {
+    account.verificationToken ||= randomToken();
+  }
+  saveAccounts();
+  els.adminStatus.textContent = "Zmieniono status konta.";
+  renderAll();
+}
+
+function deleteAccount(account) {
+  const currentId = state.user?.accountId;
+  if (!account || account.id === currentId) return;
+  if (accountRole(account) === "admin" && adminAccounts().length <= 1) {
+    els.adminStatus.textContent = "Nie można usunąć ostatniego administratora.";
+    return;
+  }
+  const ok = window.confirm(`Usunąć użytkownika ${displayNameForAccount(account)}?`);
+  if (!ok) return;
+  removePlayerForAccount(account);
+  accounts = accounts.filter((item) => item.id !== account.id);
+  saveAccounts();
+  saveState();
+  els.adminStatus.textContent = "Usunięto użytkownika.";
+  renderAll();
+}
+
+async function addAccountFromAdmin() {
+  if (!isAdmin()) return;
+  const form = {
+    firstName: els.adminFirstName.value.trim(),
+    lastName: els.adminLastName.value.trim(),
+    email: normalizeEmail(els.adminEmail.value),
+    nickname: els.adminNickname.value.trim(),
+    password: els.adminPassword.value,
+    role: els.adminRole.value === "admin" ? "admin" : "client",
+    verified: els.adminVerified.checked,
+  };
+  const error = validateRegistration(form);
+  if (error) {
+    els.adminStatus.textContent = error;
+    return;
+  }
+  if (accountByEmail(form.email)) {
+    els.adminStatus.textContent = "Konto z tym adresem już istnieje.";
+    return;
+  }
+  const password = await hashPassword(form.password);
+  const account = {
+    id: randomToken(),
+    email: form.email,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    nickname: form.nickname,
+    passwordSalt: password.salt,
+    passwordHash: password.hash,
+    verified: form.verified,
+    verifiedAt: form.verified ? new Date().toISOString() : "",
+    verificationToken: form.verified ? "" : randomToken(),
+    role: form.role,
+    createdAt: new Date().toISOString(),
+    preferences: {
+      theme: "light",
+      accent: "#f1861d",
+      compact: false,
+      favoriteTeam: "",
+    },
+  };
+  accounts.push(account);
+  ensurePlayer(displayNameForAccount(account));
+  state.activePlayer = state.user?.player || displayNameForAccount(account);
+  saveAccounts();
+  saveState();
+  els.adminAddForm.reset();
+  els.adminVerified.checked = true;
+  els.adminStatus.textContent = "Dodano użytkownika.";
+  renderAll();
 }
 
 function saveAccountSettings() {
@@ -759,6 +972,7 @@ function renderAll() {
   renderPredictions();
   renderRanking();
   renderAccountPanel();
+  renderAdminPanel();
   renderAuth();
 }
 
@@ -835,6 +1049,21 @@ function bindEvents() {
     event.preventDefault();
     saveAccountSettings();
   });
+  els.adminAddForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await addAccountFromAdmin();
+  });
+  els.adminUsersBody.addEventListener("change", (event) => {
+    const target = event.target;
+    const account = accountById(target.dataset.accountId);
+    if (target.dataset.action === "role") updateAccountRole(account, target.value);
+    if (target.dataset.action === "status") updateAccountStatus(account, target.value);
+  });
+  els.adminUsersBody.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target.dataset.action !== "delete") return;
+    deleteAccount(accountById(target.dataset.accountId));
+  });
   els.search.addEventListener("input", renderMatches);
   els.stageFilter.addEventListener("change", renderMatches);
   els.groupFilter.addEventListener("change", renderMatches);
@@ -859,6 +1088,7 @@ async function init() {
   data.defaultPlayers = cleanPlayers(data.defaultPlayers);
   state = loadState(data);
   accounts = loadAccounts();
+  ensureAdminBootstrap();
   if (state.user?.email && !state.user.accountId) {
     state.user = null;
     saveState();

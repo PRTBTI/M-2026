@@ -179,6 +179,63 @@
           <button class="button button-primary" type="submit">Zapisz ustawienia</button>
           <span id="settings-status" role="status"></span>
         </form>
+        <section class="admin-panel is-hidden" id="admin-panel" aria-labelledby="admin-title">
+          <div class="section-head">
+            <div>
+              <p class="section-label">Administrator</p>
+              <h3 id="admin-title">Zarządzanie użytkownikami</h3>
+            </div>
+          </div>
+          <form class="admin-add-form" id="admin-add-form">
+            <label>
+              Imię
+              <input id="admin-first-name" type="text" required />
+            </label>
+            <label>
+              Nazwisko
+              <input id="admin-last-name" type="text" required />
+            </label>
+            <label>
+              E-mail
+              <input id="admin-email" type="text" inputmode="email" required />
+            </label>
+            <label>
+              Pseudonim
+              <input id="admin-nickname" type="text" maxlength="32" />
+            </label>
+            <label>
+              Hasło tymczasowe
+              <input id="admin-password" type="password" minlength="8" required />
+            </label>
+            <label>
+              Rola
+              <select id="admin-role">
+                <option value="client">Klient</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </label>
+            <label class="check-row">
+              <input id="admin-verified" type="checkbox" checked />
+              Konto potwierdzone
+            </label>
+            <button class="button button-primary" type="submit">Dodaj użytkownika</button>
+            <span id="admin-status" role="status"></span>
+          </form>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Użytkownik</th>
+                  <th>E-mail</th>
+                  <th>Rola</th>
+                  <th>Status</th>
+                  <th>Akcje</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-body"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="app-section" id="matches" aria-labelledby="matches-title">
