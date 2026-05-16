@@ -49,6 +49,7 @@ const els = {
   sessionEmail: $("#session-email"),
   logoutButton: $("#logout-button"),
   themeToggle: $("#theme-toggle"),
+  headerThemeToggle: $("#header-theme-toggle"),
   settingsForm: $("#settings-form"),
   settingsNickname: $("#settings-nickname"),
   settingsTeam: $("#settings-team"),
@@ -414,7 +415,9 @@ function applyAccountPreferences() {
   document.body.classList.toggle("theme-dark", theme === "dark");
   document.body.classList.toggle("compact-view", Boolean(preferences.compact));
   document.documentElement.style.setProperty("--orange", preferences.accent || "#f1861d");
-  if (els.themeToggle) els.themeToggle.textContent = theme === "dark" ? "Tryb jasny" : "Tryb ciemny";
+  const themeLabel = theme === "dark" ? "Tryb jasny" : "Tryb ciemny";
+  if (els.themeToggle) els.themeToggle.textContent = themeLabel;
+  if (els.headerThemeToggle) els.headerThemeToggle.textContent = themeLabel;
 }
 
 function logout() {
@@ -642,6 +645,7 @@ function matchCard(match) {
   const card = document.createElement("article");
   card.className = "match-card";
   const result = getResult(match.id);
+  const admin = isAdmin();
   card.innerHTML = `
     <span class="match-no">${match.id}</span>
     <div class="teams">
@@ -654,7 +658,9 @@ function matchCard(match) {
       <span class="status-pill ${result ? "" : "empty"}">${matchStatus(match)}</span>
     </div>
   `;
-  card.append(createScoreInputs("result", match, result));
+  if (admin) {
+    card.append(createScoreInputs("result", match, result));
+  }
   return card;
 }
 
@@ -754,9 +760,25 @@ function renderGroups() {
 }
 
 function renderPlayers() {
+  const admin = isAdmin();
+  const myPlayer = state.user?.player;
+  const players = admin
+    ? state.players
+    : myPlayer && state.players.includes(myPlayer)
+      ? [myPlayer]
+      : state.players;
   const active = state.activePlayer;
-  els.activePlayer.innerHTML = state.players.map((player) => `<option value="${player}">${player}</option>`).join("");
-  els.activePlayer.value = state.players.includes(active) ? active : state.players[0];
+
+  els.activePlayer.innerHTML = players.map((p) => `<option value="${p}">${p}</option>`).join("");
+  els.activePlayer.value = players.includes(active) ? active : players[0];
+
+  if (!admin && myPlayer && state.activePlayer !== myPlayer && state.players.includes(myPlayer)) {
+    state.activePlayer = myPlayer;
+    saveState();
+  }
+
+  els.newPlayer.classList.toggle("is-hidden", !admin);
+  els.addPlayer.classList.toggle("is-hidden", !admin);
 }
 
 function renderPredictions() {
@@ -869,13 +891,13 @@ function removePlayerForAccount(account) {
 function updateAccountRole(account, role) {
   if (!account) return;
   if (accountRole(account) === "admin" && role !== "admin" && adminAccounts().length <= 1) {
-    els.adminStatus.textContent = "Nie można odebrać roli ostatniemu administratorowi.";
+    flashStatus(els.adminStatus, "Nie można odebrać roli ostatniemu administratorowi.", true);
     renderAdminPanel();
     return;
   }
   account.role = role === "admin" ? "admin" : "client";
   saveAccounts();
-  els.adminStatus.textContent = "Zmieniono rolę użytkownika.";
+  flashStatus(els.adminStatus, "Zmieniono rolę użytkownika.");
   renderAll();
 }
 
@@ -889,7 +911,7 @@ function updateAccountStatus(account, status) {
     account.verificationToken ||= randomToken();
   }
   saveAccounts();
-  els.adminStatus.textContent = "Zmieniono status konta.";
+  flashStatus(els.adminStatus, "Zmieniono status konta.");
   renderAll();
 }
 
@@ -897,7 +919,7 @@ function deleteAccount(account) {
   const currentId = state.user?.accountId;
   if (!account || account.id === currentId) return;
   if (accountRole(account) === "admin" && adminAccounts().length <= 1) {
-    els.adminStatus.textContent = "Nie można usunąć ostatniego administratora.";
+    flashStatus(els.adminStatus, "Nie można usunąć ostatniego administratora.", true);
     return;
   }
   const ok = window.confirm(`Usunąć użytkownika ${displayNameForAccount(account)}?`);
@@ -906,7 +928,7 @@ function deleteAccount(account) {
   accounts = accounts.filter((item) => item.id !== account.id);
   saveAccounts();
   saveState();
-  els.adminStatus.textContent = "Usunięto użytkownika.";
+  flashStatus(els.adminStatus, "Usunięto użytkownika.");
   renderAll();
 }
 
@@ -923,11 +945,11 @@ async function addAccountFromAdmin() {
   };
   const error = validateRegistration(form);
   if (error) {
-    els.adminStatus.textContent = error;
+    flashStatus(els.adminStatus, error, true);
     return;
   }
   if (accountByEmail(form.email)) {
-    els.adminStatus.textContent = "Konto z tym adresem już istnieje.";
+    flashStatus(els.adminStatus, "Konto z tym adresem już istnieje.", true);
     return;
   }
   const password = await hashPassword(form.password);
@@ -958,8 +980,16 @@ async function addAccountFromAdmin() {
   saveState();
   els.adminAddForm.reset();
   els.adminVerified.checked = true;
-  els.adminStatus.textContent = "Dodano użytkownika.";
+  flashStatus(els.adminStatus, "Dodano użytkownika.");
   renderAll();
+}
+
+let _statusTimer = null;
+function flashStatus(el, message, isError = false) {
+  if (_statusTimer) clearTimeout(_statusTimer);
+  el.textContent = message;
+  el.style.color = isError ? "var(--danger)" : "var(--green)";
+  _statusTimer = setTimeout(() => { el.textContent = ""; }, 4000);
 }
 
 function saveAccountSettings() {
@@ -976,7 +1006,7 @@ function saveAccountSettings() {
   state.user.player = newPlayer;
   saveAccounts();
   saveState();
-  els.settingsStatus.textContent = "Zapisano.";
+  flashStatus(els.settingsStatus, "Zapisano.");
   renderAll();
 }
 
@@ -1072,6 +1102,7 @@ function bindEvents() {
   });
   els.logoutButton.addEventListener("click", logout);
   els.themeToggle.addEventListener("click", toggleTheme);
+  if (els.headerThemeToggle) els.headerThemeToggle.addEventListener("click", toggleTheme);
   els.settingsForm.addEventListener("submit", (event) => {
     event.preventDefault();
     saveAccountSettings();
