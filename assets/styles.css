@@ -1135,6 +1135,31 @@ tr:last-child td {
     display: none;
   }
 
+  .header-tools,
+  .main-nav,
+  .user-session {
+    width: 100%;
+  }
+
+  .main-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-nav a {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .user-session {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  #session-email {
+    min-width: 100%;
+  }
+
   .dashboard {
     min-height: auto;
     padding-top: 28px;
@@ -1163,6 +1188,14 @@ tr:last-child td {
     width: 100%;
   }
 
+  .phase-tabs {
+    flex-wrap: nowrap;
+    margin-right: -10px;
+    padding: 0 10px 6px 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
   .toolbar input,
   .toolbar select,
   .player-bar input,
@@ -1188,6 +1221,84 @@ tr:last-child td {
 
   .score-inputs input {
     width: 100%;
+  }
+
+  .ranking-wrap {
+    overflow: visible;
+  }
+
+  .ranking-table {
+    display: block;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .ranking-table thead {
+    display: none;
+  }
+
+  .ranking-table tbody,
+  .ranking-table tr,
+  .ranking-table td {
+    display: block;
+  }
+
+  .ranking-table tr {
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .ranking-table tbody tr:first-child {
+    background: rgba(241, 134, 29, 0.12);
+  }
+
+  .ranking-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+  }
+
+  .ranking-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .ranking-table td::before {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .ranking-table td:nth-child(1)::before {
+    content: "Pozycja";
+  }
+
+  .ranking-table td:nth-child(2)::before {
+    content: "Typer";
+  }
+
+  .ranking-table td:nth-child(3)::before {
+    content: "Punkty";
+  }
+
+  .ranking-table td:nth-child(4)::before {
+    content: "Dokładne";
+  }
+
+  .ranking-table td:nth-child(5)::before {
+    content: "Znaki";
+  }
+
+  .ranking-table td:nth-child(6)::before {
+    content: "Typy";
   }
 
   .site-footer {
