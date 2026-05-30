@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "KIPI Mundial 2026",
+    "slug": "kipi-mundial-2026",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#11100e",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kipi.mundial2026"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#11100e"
+      },
+      "package": "com.kipi.mundial2026"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
+          }
+        }
+      ]
+    ]
+  }
+}
