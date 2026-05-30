@@ -3,6 +3,7 @@ const STORAGE_KEY = "kipi-m2026-state-v1";
 const ACCOUNT_STORAGE_KEY = "kipi-m2026-accounts-v1";
 const APP_VIEWS = new Set(["dashboard", "matches", "groups", "account", "predictions", "ranking", "data-tools"]);
 const ADMIN_ONLY_VIEWS = new Set(["data-tools"]);
+const ONLINE_CONFIG = window.KIPI_ONLINE_CONFIG || {};
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -82,6 +83,13 @@ let data;
 let state;
 let accounts = [];
 let activeStage = "";
+let backend = {
+  mode: "local",
+  client: null,
+  session: null,
+  ready: false,
+  error: "",
+};
 
 function cleanPlayers(players = []) {
   return [...new Set(players.map((name) => String(name || "").trim()).filter(Boolean))]
@@ -137,6 +145,233 @@ function loadAccounts() {
 
 function saveAccounts() {
   localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+}
+
+function wantsOnlineMode() {
+  return ONLINE_CONFIG.mode === "supabase" && ONLINE_CONFIG.supabaseUrl && ONLINE_CONFIG.supabaseAnonKey;
+}
+
+function onlineEnabled() {
+  return backend.mode === "supabase" && Boolean(backend.client);
+}
+
+function onlineAdminFunction() {
+  return ONLINE_CONFIG.adminUsersFunction || "admin-users";
+}
+
+function mapProfile(row) {
+  return {
+    id: row.id,
+    email: row.email || "",
+    firstName: row.first_name || "",
+    lastName: row.last_name || "",
+    nickname: row.nickname || "",
+    role: row.role === "admin" ? "admin" : "client",
+    verified: Boolean(row.verified),
+    verifiedAt: row.updated_at || row.created_at || "",
+    createdAt: row.created_at || "",
+    preferences: {
+      theme: row.theme === "light" ? "light" : "dark",
+      accent: row.accent || "#f1861d",
+      compact: Boolean(row.compact),
+      favoriteTeam: row.favorite_team || "",
+    },
+  };
+}
+
+function profilePayload(account) {
+  return {
+    first_name: account.firstName || "",
+    last_name: account.lastName || "",
+    nickname: account.nickname || "",
+    favorite_team: account.preferences?.favoriteTeam || "",
+    accent: account.preferences?.accent || "#f1861d",
+    compact: Boolean(account.preferences?.compact),
+    theme: account.preferences?.theme === "light" ? "light" : "dark",
+  };
+}
+
+function profileForSession() {
+  return backend.session?.user?.id ? accountById(backend.session.user.id) : null;
+}
+
+async function setupOnlineBackend() {
+  if (!wantsOnlineMode()) return;
+  try {
+    const moduleUrl = ONLINE_CONFIG.supabaseModuleUrl || "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+    const { createClient } = await import(moduleUrl);
+    backend.client = createClient(ONLINE_CONFIG.supabaseUrl, ONLINE_CONFIG.supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    if (code) {
+      await backend.client.auth.exchangeCodeForSession(code);
+      url.searchParams.delete("code");
+      history.replaceState({}, "", url);
+    }
+
+    const { data: sessionData, error } = await backend.client.auth.getSession();
+    if (error) throw error;
+    backend.session = sessionData.session;
+    backend.mode = "supabase";
+    backend.ready = true;
+    if (backend.session) {
+      await loadOnlineSnapshot();
+    } else {
+      state = createInitialState(data);
+      accounts = [];
+      state.user = null;
+    }
+  } catch (error) {
+    backend.error = error.message || String(error);
+    backend.mode = "local";
+    backend.client = null;
+    console.warn("Tryb online nie został uruchomiony:", backend.error);
+  }
+}
+
+async function loadOnlineSnapshot() {
+  if (!onlineEnabled()) return;
+  const [{ data: profiles, error: profilesError }, { data: resultRows, error: resultsError }, { data: predictionRows, error: predictionsError }] =
+    await Promise.all([
+      backend.client.from("profiles").select("*").order("created_at", { ascending: true }),
+      backend.client.from("results").select("*"),
+      backend.client.from("predictions").select("*"),
+    ]);
+
+  if (profilesError) throw profilesError;
+  if (resultsError) throw resultsError;
+  if (predictionsError) throw predictionsError;
+
+  accounts = (profiles || []).map(mapProfile);
+  const onlineState = createInitialState(data);
+  const players = cleanPlayers(accounts.map(displayNameForAccount));
+  onlineState.players = players.length ? players : onlineState.players;
+  onlineState.results = {};
+  (resultRows || []).forEach((row) => {
+    onlineState.results[String(row.match_id)] = { home: row.home, away: row.away };
+  });
+  onlineState.predictions = {};
+  (predictionRows || []).forEach((row) => {
+    const account = accountById(row.user_id);
+    if (!account) return;
+    const player = displayNameForAccount(account);
+    onlineState.predictions[player] ||= {};
+    onlineState.predictions[player][String(row.match_id)] = { home: row.home, away: row.away };
+  });
+
+  const profile = profileForSession();
+  if (profile) {
+    const player = displayNameForAccount(profile);
+    onlineState.user = {
+      accountId: profile.id,
+      email: profile.email,
+      player,
+      loggedInAt: new Date().toISOString(),
+    };
+    onlineState.activePlayer = player;
+  }
+
+  state = onlineState;
+  saveState();
+  saveAccounts();
+}
+
+async function reloadOnlineAndRender() {
+  if (!onlineEnabled()) return;
+  await loadOnlineSnapshot();
+  renderAll();
+}
+
+async function persistOnlineResult(matchId, pair) {
+  if (!onlineEnabled()) return;
+  if (!pair) {
+    const { error } = await backend.client.from("results").delete().eq("match_id", Number(matchId));
+    if (error) throw error;
+    return;
+  }
+  const { error } = await backend.client.from("results").upsert({
+    match_id: Number(matchId),
+    home: pair.home,
+    away: pair.away,
+    updated_by: backend.session?.user?.id || null,
+  });
+  if (error) throw error;
+}
+
+async function persistOnlinePrediction(player, matchId, pair) {
+  if (!onlineEnabled()) return;
+  const account = accounts.find((item) => displayNameForAccount(item) === player);
+  if (!account) return;
+  const query = backend.client.from("predictions").delete().eq("user_id", account.id).eq("match_id", Number(matchId));
+  if (!pair) {
+    const { error } = await query;
+    if (error) throw error;
+    return;
+  }
+  const { error } = await backend.client.from("predictions").upsert({
+    user_id: account.id,
+    match_id: Number(matchId),
+    home: pair.home,
+    away: pair.away,
+  });
+  if (error) throw error;
+}
+
+async function persistOnlineProfile(account) {
+  if (!onlineEnabled() || !account?.id) return;
+  const { error } = await backend.client.from("profiles").update(profilePayload(account)).eq("id", account.id);
+  if (error) throw error;
+}
+
+async function invokeAdminUsers(action, payload = {}) {
+  if (!onlineEnabled()) throw new Error("Tryb online nie jest aktywny.");
+  const { data: response, error } = await backend.client.functions.invoke(onlineAdminFunction(), {
+    body: { action, ...payload },
+  });
+  if (error) throw error;
+  if (response?.error) throw new Error(response.error);
+  return response;
+}
+
+async function replaceOnlineTournamentState(nextState) {
+  if (!onlineEnabled()) return;
+  const resultRows = Object.entries(nextState.results || {})
+    .filter(([, pair]) => isComplete(pair))
+    .map(([matchId, pair]) => ({
+      match_id: Number(matchId),
+      home: pair.home,
+      away: pair.away,
+      updated_by: backend.session?.user?.id || null,
+    }));
+  const predictionRows = [];
+  Object.entries(nextState.predictions || {}).forEach(([player, predictions]) => {
+    const account = accounts.find((item) => displayNameForAccount(item) === player);
+    if (!account) return;
+    Object.entries(predictions || {}).forEach(([matchId, pair]) => {
+      if (!isComplete(pair)) return;
+      predictionRows.push({ user_id: account.id, match_id: Number(matchId), home: pair.home, away: pair.away });
+    });
+  });
+
+  let result = await backend.client.from("results").delete().neq("match_id", -1);
+  if (result.error) throw result.error;
+  result = await backend.client.from("predictions").delete().neq("match_id", -1);
+  if (result.error) throw result.error;
+  if (resultRows.length) {
+    result = await backend.client.from("results").upsert(resultRows);
+    if (result.error) throw result.error;
+  }
+  if (predictionRows.length) {
+    result = await backend.client.from("predictions").upsert(predictionRows);
+    if (result.error) throw result.error;
+  }
 }
 
 function canUseView(view) {
@@ -367,6 +602,30 @@ async function registerAccount() {
     return;
   }
 
+  if (onlineEnabled()) {
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error: signUpError } = await backend.client.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: {
+          first_name: form.firstName,
+          last_name: form.lastName,
+          nickname: form.nickname,
+        },
+      },
+    });
+    if (signUpError) {
+      els.registerStatus.textContent = signUpError.message;
+      return;
+    }
+    els.registerPassword.value = "";
+    els.verificationBox.classList.add("is-hidden");
+    els.registerStatus.textContent = "Wysłano wiadomość potwierdzającą. Sprawdź skrzynkę e-mail i kliknij link aktywacyjny.";
+    return;
+  }
+
   let account = accountByEmail(form.email);
   if (account?.verified) {
     els.registerStatus.textContent = "Konto z tym adresem już istnieje. Zaloguj się.";
@@ -409,6 +668,23 @@ async function registerAccount() {
 
 async function loginWithCredentials() {
   const email = normalizeEmail(els.loginEmail.value);
+  if (onlineEnabled()) {
+    const { error: loginError } = await backend.client.auth.signInWithPassword({
+      email,
+      password: els.loginPassword.value,
+    });
+    if (loginError) {
+      els.loginStatus.textContent = loginError.message;
+      return;
+    }
+    const { data: sessionData } = await backend.client.auth.getSession();
+    backend.session = sessionData.session;
+    await reloadOnlineAndRender();
+    els.loginPassword.value = "";
+    els.loginStatus.textContent = "";
+    return;
+  }
+
   const account = accountByEmail(email);
   if (!account) {
     els.loginStatus.textContent = "Nie znaleziono konta dla tego adresu.";
@@ -432,6 +708,7 @@ async function loginWithCredentials() {
 }
 
 function verifyAccountFromUrl() {
+  if (onlineEnabled()) return false;
   const url = new URL(window.location.href);
   const token = url.searchParams.get("verify");
   if (!token) return false;
@@ -464,7 +741,11 @@ function applyAccountPreferences() {
   if (els.headerThemeToggle) els.headerThemeToggle.textContent = themeLabel;
 }
 
-function logout() {
+async function logout() {
+  if (onlineEnabled()) {
+    await backend.client.auth.signOut();
+    backend.session = null;
+  }
   state.user = null;
   saveState();
   renderAuth();
@@ -547,6 +828,7 @@ function setResult(matchId, pair) {
   if (!pair) delete state.results[String(matchId)];
   else state.results[String(matchId)] = pair;
   saveState();
+  persistOnlineResult(matchId, pair).catch((error) => console.warn("Nie zapisano wyniku online:", error.message));
   renderAll();
 }
 
@@ -556,6 +838,7 @@ function setPrediction(player, matchId, pair) {
   if (!pair) delete state.predictions[player][String(matchId)];
   else state.predictions[player][String(matchId)] = pair;
   saveState();
+  persistOnlinePrediction(player, matchId, pair).catch((error) => console.warn("Nie zapisano typu online:", error.message));
   renderAll();
 }
 
@@ -979,11 +1262,22 @@ function removePlayerForAccount(account) {
   }
 }
 
-function updateAccountRole(account, role) {
+async function updateAccountRole(account, role) {
   if (!account) return;
   if (accountRole(account) === "admin" && role !== "admin" && adminAccounts().length <= 1) {
     flashStatus(els.adminStatus, "Nie można odebrać roli ostatniemu administratorowi.", true);
     renderAdminPanel();
+    return;
+  }
+  if (onlineEnabled()) {
+    try {
+      await invokeAdminUsers("update", { userId: account.id, role: role === "admin" ? "admin" : "client" });
+      await reloadOnlineAndRender();
+      flashStatus(els.adminStatus, "Zmieniono rolę użytkownika.");
+    } catch (error) {
+      flashStatus(els.adminStatus, error.message, true);
+      renderAdminPanel();
+    }
     return;
   }
   account.role = role === "admin" ? "admin" : "client";
@@ -992,8 +1286,19 @@ function updateAccountRole(account, role) {
   renderAll();
 }
 
-function updateAccountStatus(account, status) {
+async function updateAccountStatus(account, status) {
   if (!account) return;
+  if (onlineEnabled()) {
+    try {
+      await invokeAdminUsers("update", { userId: account.id, verified: status === "verified" });
+      await reloadOnlineAndRender();
+      flashStatus(els.adminStatus, "Zmieniono status konta.");
+    } catch (error) {
+      flashStatus(els.adminStatus, error.message, true);
+      renderAdminPanel();
+    }
+    return;
+  }
   account.verified = status === "verified";
   if (account.verified) {
     account.verifiedAt ||= new Date().toISOString();
@@ -1006,7 +1311,7 @@ function updateAccountStatus(account, status) {
   renderAll();
 }
 
-function deleteAccount(account) {
+async function deleteAccount(account) {
   const currentId = state.user?.accountId;
   if (!account || account.id === currentId) return;
   if (accountRole(account) === "admin" && adminAccounts().length <= 1) {
@@ -1015,6 +1320,16 @@ function deleteAccount(account) {
   }
   const ok = window.confirm(`Usunąć użytkownika ${displayNameForAccount(account)}?`);
   if (!ok) return;
+  if (onlineEnabled()) {
+    try {
+      await invokeAdminUsers("delete", { userId: account.id });
+      await reloadOnlineAndRender();
+      flashStatus(els.adminStatus, "Usunięto użytkownika.");
+    } catch (error) {
+      flashStatus(els.adminStatus, error.message, true);
+    }
+    return;
+  }
   removePlayerForAccount(account);
   accounts = accounts.filter((item) => item.id !== account.id);
   saveAccounts();
@@ -1041,6 +1356,18 @@ async function addAccountFromAdmin() {
   }
   if (accountByEmail(form.email)) {
     flashStatus(els.adminStatus, "Konto z tym adresem już istnieje.", true);
+    return;
+  }
+  if (onlineEnabled()) {
+    try {
+      await invokeAdminUsers("create", { user: form });
+      await reloadOnlineAndRender();
+      els.adminAddForm.reset();
+      els.adminVerified.checked = true;
+      flashStatus(els.adminStatus, "Dodano użytkownika.");
+    } catch (error) {
+      flashStatus(els.adminStatus, error.message, true);
+    }
     return;
   }
   const password = await hashPassword(form.password);
@@ -1097,6 +1424,7 @@ function saveAccountSettings() {
   state.user.player = newPlayer;
   saveAccounts();
   saveState();
+  persistOnlineProfile(account).catch((error) => flashStatus(els.settingsStatus, error.message, true));
   flashStatus(els.settingsStatus, "Zapisano.");
   renderAll();
 }
@@ -1107,6 +1435,7 @@ function toggleTheme() {
   account.preferences ||= {};
   account.preferences.theme = account.preferences.theme === "dark" ? "light" : "dark";
   saveAccounts();
+  persistOnlineProfile(account).catch((error) => console.warn("Nie zapisano motywu online:", error.message));
   renderAll();
 }
 
@@ -1173,6 +1502,7 @@ function importState() {
     };
     if (!state.players.includes(state.activePlayer)) state.activePlayer = state.players[0];
     saveState();
+    replaceOnlineTournamentState(state).catch((error) => flashStatus(els.dataStatus, error.message, true));
     els.importBox.value = "";
     els.dataStatus.textContent = "Zaimportowano dane.";
     renderAll();
@@ -1191,6 +1521,7 @@ function resetState() {
   localStorage.removeItem(STORAGE_KEY);
   state = createInitialState(data);
   saveState();
+  replaceOnlineTournamentState(state).catch((error) => flashStatus(els.dataStatus, error.message, true));
   renderAll();
 }
 
@@ -1279,10 +1610,13 @@ async function init() {
   data.defaultPlayers = cleanPlayers(data.defaultPlayers);
   state = loadState(data);
   accounts = loadAccounts();
-  ensureAdminBootstrap();
-  if (state.user?.email && !state.user.accountId) {
-    state.user = null;
-    saveState();
+  await setupOnlineBackend();
+  if (!onlineEnabled()) {
+    ensureAdminBootstrap();
+    if (state.user?.email && !state.user.accountId) {
+      state.user = null;
+      saveState();
+    }
   }
   bindEvents();
   verifyAccountFromUrl();

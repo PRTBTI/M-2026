@@ -18,6 +18,53 @@ Potem otwórz `http://localhost:4173`.
 2. Źródło ustaw na branch `main` i katalog root.
 3. Strona działa bez procesu build — nie ma żadnego bundlera.
 
+## Tryb online z Supabase
+
+Aplikacja ma teraz dwa tryby pracy:
+
+| Tryb | Zastosowanie |
+|---|---|
+| `local` | Demo/prototyp, dane w `localStorage`, działa od razu na GitHub Pages |
+| `supabase` | Produkcja online: prawdziwe konta, e-mail confirmation, wspólna baza wyników i typów |
+
+Konfiguracja produkcyjna:
+
+1. Utwórz projekt w Supabase.
+2. W SQL Editor uruchom `supabase/schema.sql`.
+3. W Supabase CLI wdroż funkcję administracyjną:
+
+```powershell
+supabase functions deploy admin-users
+```
+
+4. W Supabase Auth ustaw URL strony jako Site URL oraz Redirect URL, np.:
+
+```text
+https://prtbti.github.io/M-2026/
+```
+
+5. W pliku `assets/online-config.js` ustaw:
+
+```js
+window.KIPI_ONLINE_CONFIG = {
+  mode: "supabase",
+  supabaseUrl: "https://TWÓJ-PROJEKT.supabase.co",
+  supabaseAnonKey: "TWÓJ_PUBLICZNY_ANON_KEY",
+  supabaseModuleUrl: "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm",
+  adminUsersFunction: "admin-users",
+};
+```
+
+Anon key jest publiczny i może być w frontendzie. Service role key zostaje wyłącznie po stronie Supabase Edge Function.
+
+W trybie Supabase aplikacja używa:
+
+- Supabase Auth do rejestracji, logowania i potwierdzania e-maila.
+- Tabeli `profiles` do profilu, pseudonimu, roli i ustawień konta.
+- Tabeli `results` do wyników meczów.
+- Tabeli `predictions` do typów użytkowników.
+- Edge Function `admin-users` do dodawania, usuwania i modyfikowania użytkowników przez administratora.
+
 ## Struktura plików
 
 ```
