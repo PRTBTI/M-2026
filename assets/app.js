@@ -4,6 +4,7 @@ const ACCOUNT_STORAGE_KEY = "kipi-m2026-accounts-v1";
 const APP_VIEWS = new Set(["dashboard", "matches", "groups", "account", "predictions", "ranking", "data-tools"]);
 const ADMIN_ONLY_VIEWS = new Set(["data-tools"]);
 const ONLINE_CONFIG = window.KIPI_ONLINE_CONFIG || {};
+const PREDICTION_LOCK_MINUTES = 15;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -813,33 +814,80 @@ function getPrediction(player, matchId) {
   return isComplete(prediction) ? prediction : null;
 }
 
+function matchById(matchId) {
+  return data.matches.find((match) => String(match.id) === String(matchId));
+}
+
+function parsePolandTime(value) {
+  if (!value) return null;
+  const iso = String(value).includes("+") || String(value).endsWith("Z") ? value : `${value}+02:00`;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function predictionLockDate(match) {
+  const startsAt = parsePolandTime(match?.polandTime);
+  if (!startsAt) return null;
+  return new Date(startsAt.getTime() - PREDICTION_LOCK_MINUTES * 60 * 1000);
+}
+
+function predictionIsLocked(match) {
+  const lockAt = predictionLockDate(match);
+  return lockAt ? Date.now() >= lockAt.getTime() : true;
+}
+
+function predictionLockLabel(match) {
+  const lockAt = predictionLockDate(match);
+  if (!lockAt) return "Typowanie zablokowane.";
+  const label = new Intl.DateTimeFormat("pl-PL", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Warsaw",
+  }).format(lockAt);
+  return `Typowanie do ${label}`;
+}
+
 function canEditResults() {
   return isAdmin();
 }
 
-function canEditPrediction(player) {
+function canEditPrediction(player, match = null) {
   const account = currentAccount();
   if (!account) return false;
+  if (match && predictionIsLocked(match)) return false;
   return isAdmin(account) || player === displayNameForAccount(account);
 }
 
-function setResult(matchId, pair) {
-  if (!canEditResults()) return;
+async function setResult(matchId, pair) {
+  if (!canEditResults()) return false;
+  if (onlineEnabled()) {
+    await persistOnlineResult(matchId, pair);
+    await reloadOnlineAndRender();
+    return true;
+  }
   if (!pair) delete state.results[String(matchId)];
   else state.results[String(matchId)] = pair;
   saveState();
-  persistOnlineResult(matchId, pair).catch((error) => console.warn("Nie zapisano wyniku online:", error.message));
   renderAll();
+  return true;
 }
 
-function setPrediction(player, matchId, pair) {
-  if (!canEditPrediction(player)) return;
+async function setPrediction(player, matchId, pair) {
+  const match = matchById(matchId);
+  if (!canEditPrediction(player, match)) return false;
+  if (onlineEnabled()) {
+    await persistOnlinePrediction(player, matchId, pair);
+    await reloadOnlineAndRender();
+    return true;
+  }
   state.predictions[player] ||= {};
   if (!pair) delete state.predictions[player][String(matchId)];
   else state.predictions[player][String(matchId)] = pair;
   saveState();
-  persistOnlinePrediction(player, matchId, pair).catch((error) => console.warn("Nie zapisano typu online:", error.message));
   renderAll();
+  return true;
 }
 
 function outcome(pair) {
@@ -962,10 +1010,12 @@ function filteredMatches() {
   });
 }
 
-function createScoreInputs(kind, match, pair, player = "") {
+function createScoreInputs(kind, match, pair, player = "", options = {}) {
   const wrap = document.createElement("div");
   wrap.className = "score-inputs";
-  const editable = kind === "result" ? canEditResults() : canEditPrediction(player);
+  const baseEditable = kind === "result" ? canEditResults() : canEditPrediction(player, match);
+  const editable = options.editable ?? baseEditable;
+  const autosave = options.autosave ?? true;
   const home = document.createElement("input");
   const away = document.createElement("input");
   const sep = document.createElement("span");
@@ -979,32 +1029,46 @@ function createScoreInputs(kind, match, pair, player = "") {
   away.value = pair?.away ?? "";
   home.ariaLabel = `${match.homeTeam} gole`;
   away.ariaLabel = `${match.awayTeam} gole`;
-  home.disabled = !editable;
-  away.disabled = !editable;
+  wrap.setEditable = (allowed) => {
+    home.disabled = !allowed;
+    away.disabled = !allowed;
+  };
+  wrap.readPair = () => {
+    const homeRaw = home.value.trim();
+    const awayRaw = away.value.trim();
+    if (!homeRaw && !awayRaw) return null;
+    return readPair(homeRaw, awayRaw);
+  };
+  wrap.focusInputs = () => home.focus();
+  wrap.setEditable(editable);
   if (!editable) {
-    const message = kind === "result" ? "Wynik może wpisać administrator." : "Możesz edytować tylko własne typy.";
+    const message =
+      kind === "result"
+        ? "Wynik może wpisać administrator."
+        : predictionIsLocked(match)
+          ? `Typ zablokowany ${PREDICTION_LOCK_MINUTES} minut przed meczem.`
+          : "Możesz edytować tylko własne typy.";
     home.title = message;
     away.title = message;
   }
   sep.textContent = ":";
   const onChange = () => {
-    if (!editable) return;
-    const homeRaw = home.value.trim();
-    const awayRaw = away.value.trim();
-    if (!homeRaw && !awayRaw) {
-      if (kind === "result") setResult(match.id, null);
-      if (kind === "prediction") setPrediction(player, match.id, null);
+    if (!baseEditable) return;
+    const nextPair = wrap.readPair();
+    if (!nextPair) {
+      if (kind === "result") setResult(match.id, null).catch((error) => console.warn("Nie zapisano wyniku:", error.message));
+      if (kind === "prediction") setPrediction(player, match.id, null).catch((error) => console.warn("Nie zapisano typu:", error.message));
       return;
     }
-    const nextPair = readPair(homeRaw, awayRaw);
-    if (!nextPair) return;
-    if (kind === "result") setResult(match.id, nextPair);
-    if (kind === "prediction") setPrediction(player, match.id, nextPair);
+    if (kind === "result") setResult(match.id, nextPair).catch((error) => console.warn("Nie zapisano wyniku:", error.message));
+    if (kind === "prediction") setPrediction(player, match.id, nextPair).catch((error) => console.warn("Nie zapisano typu:", error.message));
   };
-  home.addEventListener("input", onChange);
-  away.addEventListener("input", onChange);
-  home.addEventListener("change", onChange);
-  away.addEventListener("change", onChange);
+  if (autosave) {
+    home.addEventListener("input", onChange);
+    away.addEventListener("input", onChange);
+    home.addEventListener("change", onChange);
+    away.addEventListener("change", onChange);
+  }
   wrap.append(home, sep, away);
   return wrap;
 }
@@ -1027,7 +1091,40 @@ function matchCard(match) {
     </div>
   `;
   if (admin) {
-    card.append(createScoreInputs("result", match, result));
+    const editor = createScoreInputs("result", match, result, "", { autosave: false, editable: !result });
+    const control = document.createElement("div");
+    const actions = document.createElement("div");
+    const button = document.createElement("button");
+    const status = document.createElement("span");
+    control.className = "score-control";
+    actions.className = "score-actions";
+    button.className = "button button-primary button-small";
+    button.type = "button";
+    button.textContent = result ? "Popraw wynik" : "Zapisz wynik";
+    status.className = "save-status";
+    button.addEventListener("click", async () => {
+      if (result && button.dataset.editing !== "true") {
+        button.dataset.editing = "true";
+        button.textContent = "Zapisz wynik";
+        status.textContent = "Wprowadź poprawkę i zapisz.";
+        editor.setEditable(true);
+        editor.focusInputs();
+        return;
+      }
+      const nextPair = editor.readPair();
+      if (!nextPair) {
+        status.textContent = "Podaj pełny wynik.";
+        return;
+      }
+      try {
+        await setResult(match.id, nextPair);
+      } catch (error) {
+        status.textContent = error.message || "Nie zapisano wyniku.";
+      }
+    });
+    actions.append(button, status);
+    control.append(editor, actions);
+    card.append(control);
   }
   return card;
 }
@@ -1037,6 +1134,8 @@ function predictionCard(match) {
   const prediction = getPrediction(player, match.id);
   const actual = getResult(match.id);
   const score = scorePrediction(prediction, actual);
+  const locked = predictionIsLocked(match);
+  const editable = canEditPrediction(player, match);
   const card = document.createElement("article");
   card.className = "prediction-card";
   card.innerHTML = `
@@ -1046,9 +1145,56 @@ function predictionCard(match) {
       <div class="match-meta">${formatDate(match.polandTime)} · ${match.venue}</div>
       <span class="status-pill ${actual ? "" : "empty"}">${actual ? `Wynik ${actual.home}:${actual.away}` : "Bez wyniku"}</span>
       ${actual && prediction ? `<span class="status-pill">${score.total} pkt</span>` : ""}
+      <span class="status-pill ${locked ? "locked" : "empty"}">${locked ? "Typowanie zamknięte" : predictionLockLabel(match)}</span>
     </div>
   `;
-  card.append(createScoreInputs("prediction", match, prediction, player));
+  const editor = createScoreInputs("prediction", match, prediction, player, {
+    autosave: false,
+    editable: editable && !prediction,
+  });
+  const control = document.createElement("div");
+  const actions = document.createElement("div");
+  const button = document.createElement("button");
+  const status = document.createElement("span");
+  control.className = "score-control";
+  actions.className = "score-actions";
+  button.className = "button button-primary button-small";
+  button.type = "button";
+  button.textContent = prediction ? "Popraw typ" : "Dodaj typ";
+  button.disabled = !editable;
+  status.className = "save-status";
+  status.textContent = prediction ? "Typ zapisany na koncie klienta." : "";
+  if (locked) status.textContent = "Zmiana typu zablokowana 15 minut przed meczem.";
+  button.addEventListener("click", async () => {
+    if (!editable) {
+      status.textContent = "Nie można zmienić typu dla tego meczu.";
+      return;
+    }
+    if (prediction && button.dataset.editing !== "true") {
+      button.dataset.editing = "true";
+      button.textContent = "Zapisz typ";
+      status.textContent = "Wprowadź poprawkę i zapisz.";
+      editor.setEditable(true);
+      editor.focusInputs();
+      return;
+    }
+    const nextPair = editor.readPair();
+    if (!nextPair) {
+      status.textContent = "Podaj pełny typ wyniku.";
+      return;
+    }
+    try {
+      const saved = await setPrediction(player, match.id, nextPair);
+      if (!saved) {
+        status.textContent = "Zmiana typu jest już zablokowana.";
+      }
+    } catch (error) {
+      status.textContent = error.message || "Nie zapisano typu.";
+    }
+  });
+  actions.append(button, status);
+  control.append(editor, actions);
+  card.append(control);
   return card;
 }
 
@@ -1604,6 +1750,12 @@ function bindEvents() {
 }
 
 async function init() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js").catch((error) => {
+      console.warn("Service worker nie został zarejestrowany:", error.message);
+    });
+  }
+
   const response = await fetch(DATA_URL);
   if (!response.ok) throw new Error(`Nie można wczytać ${DATA_URL}`);
   data = await response.json();

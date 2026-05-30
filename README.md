@@ -18,6 +18,15 @@ Potem otwórz `http://localhost:4173`.
 2. Źródło ustaw na branch `main` i katalog root.
 3. Strona działa bez procesu build — nie ma żadnego bundlera.
 
+## Instalacja na telefonie
+
+Aplikacja jest przygotowana jako PWA, czyli może działać jak instalowana aplikacja mobilna bez publikacji w Google Play lub App Store.
+
+- Android: otwórz `https://prtbti.github.io/M-2026/` w Chrome i wybierz **Zainstaluj aplikację** albo **Dodaj do ekranu głównego**.
+- iOS: otwórz `https://prtbti.github.io/M-2026/` w Safari, naciśnij **Udostępnij** i wybierz **Do ekranu początkowego**.
+- Instalacja wymaga HTTPS. GitHub Pages spełnia ten warunek.
+- PWA ma `manifest.webmanifest`, ikony dla Android/iOS i `service-worker.js`, dzięki czemu ekran startowy i podstawowe zasoby aplikacji są stabilne na telefonie.
+
 ## Tryb online z Supabase
 
 Aplikacja ma teraz dwa tryby pracy:
@@ -31,19 +40,20 @@ Konfiguracja produkcyjna:
 
 1. Utwórz projekt w Supabase.
 2. W SQL Editor uruchom `supabase/schema.sql`.
-3. W Supabase CLI wdroż funkcję administracyjną:
+3. W SQL Editor uruchom `supabase/matches_seed.sql`, żeby baza znała godziny startu meczów używane do blokady typów.
+4. W Supabase CLI wdroż funkcję administracyjną:
 
 ```powershell
 supabase functions deploy admin-users
 ```
 
-4. W Supabase Auth ustaw URL strony jako Site URL oraz Redirect URL, np.:
+5. W Supabase Auth ustaw URL strony jako Site URL oraz Redirect URL, np.:
 
 ```text
 https://prtbti.github.io/M-2026/
 ```
 
-5. W pliku `assets/online-config.js` ustaw:
+6. W pliku `assets/online-config.js` ustaw:
 
 ```js
 window.KIPI_ONLINE_CONFIG = {
@@ -61,6 +71,7 @@ W trybie Supabase aplikacja używa:
 
 - Supabase Auth do rejestracji, logowania i potwierdzania e-maila.
 - Tabeli `profiles` do profilu, pseudonimu, roli i ustawień konta.
+- Tabeli `matches` do godzin startu meczów i blokady typowania 15 minut przed meczem.
 - Tabeli `results` do wyników meczów.
 - Tabeli `predictions` do typów użytkowników.
 - Edge Function `admin-users` do dodawania, usuwania i modyfikowania użytkowników przez administratora.

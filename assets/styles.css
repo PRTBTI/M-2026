@@ -848,6 +848,13 @@ textarea:focus {
   align-items: center;
 }
 
+.score-control {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
 .score-inputs input {
   width: 64px;
   min-width: 0;
@@ -857,6 +864,19 @@ textarea:focus {
 
 .score-inputs span {
   color: var(--muted);
+  font-weight: 800;
+}
+
+.score-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-status {
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -877,6 +897,11 @@ textarea:focus {
 .status-pill.empty {
   background: #f1ece4;
   color: var(--muted);
+}
+
+.status-pill.locked {
+  background: rgba(189, 45, 31, 0.12);
+  color: var(--danger);
 }
 
 .empty-state {
@@ -1115,8 +1140,8 @@ tr:last-child td {
   }
 
   .match-card .match-meta,
-  .match-card .score-inputs,
-  .prediction-card .score-inputs {
+  .match-card .score-control,
+  .prediction-card .score-control {
     grid-column: 2;
   }
 }
@@ -1254,8 +1279,8 @@ tr:last-child td {
   }
 
   .match-card .match-meta,
-  .match-card .score-inputs,
-  .prediction-card .score-inputs {
+  .match-card .score-control,
+  .prediction-card .score-control {
     grid-column: auto;
   }
 

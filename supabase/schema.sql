@@ -17,6 +17,11 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.matches (
+  match_id integer primary key,
+  starts_at timestamptz not null
+);
+
 create table if not exists public.results (
   match_id integer primary key,
   home integer not null check (home >= 0),
@@ -35,6 +40,7 @@ create table if not exists public.predictions (
 );
 
 alter table public.profiles enable row level security;
+alter table public.matches enable row level security;
 alter table public.results enable row level security;
 alter table public.predictions enable row level security;
 
@@ -75,6 +81,21 @@ as $$
     from public.profiles
     where id = auth.uid()
       and role = 'admin'
+  );
+$$;
+
+create or replace function public.prediction_is_open(target_match_id integer)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.matches
+    where match_id = target_match_id
+      and now() < starts_at - interval '15 minutes'
   );
 $$;
 
@@ -157,6 +178,19 @@ to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "Matches readable by signed users" on public.matches;
+create policy "Matches readable by signed users"
+on public.matches for select
+to authenticated
+using (true);
+
+drop policy if exists "Admins manage matches" on public.matches;
+create policy "Admins manage matches"
+on public.matches for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 drop policy if exists "Results readable by signed users" on public.results;
 create policy "Results readable by signed users"
 on public.results for select
@@ -180,12 +214,12 @@ drop policy if exists "Users manage own predictions" on public.predictions;
 create policy "Users manage own predictions"
 on public.predictions for all
 to authenticated
-using (user_id = auth.uid())
-with check (user_id = auth.uid());
+using (user_id = auth.uid() and public.prediction_is_open(match_id))
+with check (user_id = auth.uid() and public.prediction_is_open(match_id));
 
 drop policy if exists "Admins manage all predictions" on public.predictions;
 create policy "Admins manage all predictions"
 on public.predictions for all
 to authenticated
-using (public.is_admin())
-with check (public.is_admin());
+using (public.is_admin() and public.prediction_is_open(match_id))
+with check (public.is_admin() and public.prediction_is_open(match_id));
